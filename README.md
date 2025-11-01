@@ -2,7 +2,7 @@
 
 Комплексная торговая система на базе Freqtrade, интегрирующая Smart Money Concepts, Footprint Analysis, Volume Profile, Market Profile и TPO в единую многоуровневую стратегию.
 
-[![Tests](https://github.com/yourusername/MaxFlash/actions/workflows/tests.yml/badge.svg)](https://github.com/yourusername/MaxFlash/actions/workflows/tests.yml)
+[![Tests](https://github.com/devyjones991-ai/MaxFlash/actions/workflows/tests.yml/badge.svg)](https://github.com/devyjones991-ai/MaxFlash/actions/workflows/tests.yml)
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
 
 ## 🌟 Особенности
