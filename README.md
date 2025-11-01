@@ -36,7 +36,7 @@
 
 ```bash
 # Клонировать репозиторий
-git clone https://github.com/yourusername/MaxFlash.git
+git clone https://github.com/devyjones991-ai/MaxFlash.git
 cd MaxFlash
 
 # Установить зависимости
@@ -47,7 +47,27 @@ pip install -r requirements.txt
 pip install pytest pytest-cov pytest-mock
 ```
 
-### 2. Тестирование
+### 2. Запуск Web Dashboard (НОВОЕ! 🎉)
+
+**Windows:**
+```bash
+cd web_interface
+start_dashboard.bat
+# Или просто дважды кликните на start_dashboard.bat
+```
+
+**Linux/Mac:**
+```bash
+cd web_interface
+chmod +x start_dashboard.sh
+./start_dashboard.sh
+```
+
+**Откройте в браузере:** http://localhost:8050
+
+📊 Полная визуализация всех индикаторов в реальном времени!
+
+### 3. Тестирование
 
 ```bash
 # Быстрый тест
