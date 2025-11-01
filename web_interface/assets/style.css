@@ -1,0 +1,117 @@
+/* Кастомные стили для MaxFlash Trading Dashboard */
+
+/* Общие стили */
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background-color: #1e1e1e;
+}
+
+/* Карточки */
+.card {
+    border-radius: 10px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+    transition: transform 0.2s;
+}
+
+.card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 12px rgba(0, 0, 0, 0.4);
+}
+
+/* Кнопки */
+.btn {
+    border-radius: 5px;
+    transition: all 0.2s;
+}
+
+.btn:hover {
+    transform: scale(1.05);
+}
+
+/* Графики */
+.js-plotly-plot {
+    border-radius: 8px;
+}
+
+/* Сигналы */
+.signal-card {
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+    0%, 100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.8;
+    }
+}
+
+/* Badges */
+.badge {
+    font-weight: 600;
+    padding: 0.35em 0.65em;
+}
+
+/* Табы */
+.nav-tabs .nav-link.active {
+    border-bottom: 3px solid #007bff;
+    font-weight: bold;
+}
+
+/* Статус бар */
+.status-alert {
+    border-left: 4px solid;
+    animation: slideIn 0.3s ease-out;
+}
+
+@keyframes slideIn {
+    from {
+        transform: translateX(-100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+/* Скрытие Plotly toolbar кнопок */
+.modebar {
+    opacity: 0.7;
+}
+
+.modebar:hover {
+    opacity: 1;
+}
+
+/* Кастомные цвета для темной темы */
+.text-success-custom {
+    color: #26a69a !important;
+}
+
+.text-danger-custom {
+    color: #ef5350 !important;
+}
+
+/* Анимация обновления */
+.refreshing {
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    from {
+        transform: rotate(0deg);
+    }
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .card {
+        margin-bottom: 1rem;
+    }
+}
+
