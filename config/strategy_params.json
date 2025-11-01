@@ -1,0 +1,22 @@
+{
+  "risk_per_trade": 0.01,
+  "max_risk_per_trade": 0.02,
+  "min_risk_reward_ratio": 2.0,
+  "order_block_lookback": 20,
+  "order_block_min_candles": 3,
+  "order_block_max_candles": 5,
+  "fvg_min_size_pct": 0.1,
+  "fvg_max_age_bars": 50,
+  "volume_profile_period": 20,
+  "value_area_percent": 0.70,
+  "hvn_threshold_multiplier": 1.5,
+  "lvn_threshold_multiplier": 0.5,
+  "market_profile_period": 24,
+  "tpo_periods_per_day": 24,
+  "delta_threshold": 0.1,
+  "absorption_threshold": 2.0,
+  "confluence_min_signals": 3,
+  "macro_timeframe": "1d",
+  "intermediate_timeframe": "1h",
+  "micro_timeframe": "15m"
+}

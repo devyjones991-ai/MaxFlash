@@ -1,0 +1,24 @@
+# Core dependencies
+pandas>=2.0.0
+numpy>=1.24.0
+scipy>=1.10.0
+
+# Technical Analysis
+TA-Lib>=0.4.25
+
+# Visualization
+matplotlib>=3.7.0
+plotly>=5.14.0
+
+# Testing
+pytest>=7.4.0
+pytest-cov>=4.1.0
+
+# Data processing
+scikit-learn>=1.3.0
+
+# Utilities
+python-dotenv>=1.0.0
+pyyaml>=6.0
+
+# Freqtrade will be installed from the cloned repository
