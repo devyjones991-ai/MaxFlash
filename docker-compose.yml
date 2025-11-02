@@ -1,0 +1,89 @@
+version: '3.8'
+
+services:
+  # Redis для кэширования и очередей
+  redis:
+    image: redis:7-alpine
+    container_name: maxflash-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # PostgreSQL для хранения данных (опционально)
+  postgres:
+    image: postgres:15-alpine
+    container_name: maxflash-postgres
+    environment:
+      POSTGRES_USER: maxflash
+      POSTGRES_PASSWORD: maxflash_dev
+      POSTGRES_DB: maxflash
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U maxflash"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Web Dashboard
+  dashboard:
+    build:
+      context: ./web_interface
+      dockerfile: ../Dockerfile.dashboard
+    container_name: maxflash-dashboard
+    ports:
+      - "8050:8050"
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - DATABASE_URL=postgresql://maxflash:maxflash_dev@postgres:5432/maxflash
+    volumes:
+      - ./web_interface:/app
+      - ./data:/app/data
+    depends_on:
+      redis:
+        condition: service_healthy
+    command: python app_modern.py
+    restart: unless-stopped
+
+  # API Backend (FastAPI)
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    container_name: maxflash-api
+    ports:
+      - "8000:8000"
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - DATABASE_URL=postgresql://maxflash:maxflash_dev@postgres:5432/maxflash
+      - EXCHANGE_NAME=${EXCHANGE_NAME:-binance}
+      - EXCHANGE_API_KEY=${EXCHANGE_API_KEY:-}
+      - EXCHANGE_API_SECRET=${EXCHANGE_API_SECRET:-}
+    volumes:
+      - ./indicators:/app/indicators
+      - ./utils:/app/utils
+      - ./data:/app/data
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  redis-data:
+  postgres-data:
+
+networks:
+  default:
+    name: maxflash-network
+
