@@ -1,0 +1,44 @@
+name: Lint
+
+on:
+  workflow_call:
+  push:
+    branches: [ main, master, develop ]
+  pull_request:
+    branches: [ main, master, develop ]
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+        cache: 'pip'
+    
+    - name: Install linting tools
+      run: |
+        pip install --upgrade pip
+        pip install flake8>=6.0.0 black>=23.0.0
+    
+    - name: Run flake8
+      continue-on-error: true
+      run: |
+        flake8 . \
+          --count \
+          --select=E9,F63,F7,F82 \
+          --show-source \
+          --statistics \
+          --max-line-length=120 \
+          --exclude=freqtrade,venv,__pycache__,.git || true
+    
+    - name: Check code formatting with black
+      continue-on-error: true
+      run: |
+        black --check . --exclude='freqtrade|venv|__pycache__' || true
+
