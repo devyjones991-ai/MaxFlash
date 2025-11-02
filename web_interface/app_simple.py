@@ -27,7 +27,13 @@ def create_simple_app():
         ])
         return app
     
-    app = dash.Dash(__name__, external_stylesheets=[dbc.themes.DARKLY])
+    app = dash.Dash(
+        __name__,
+        external_stylesheets=[
+            dbc.themes.DARKLY,
+            "https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
+        ]
+    )
     app.title = "MaxFlash Dashboard"
     
     app.layout = dbc.Container([

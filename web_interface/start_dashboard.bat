@@ -43,13 +43,19 @@ echo.
 
 cd /d %~dp0
 
-REM Пробуем запустить основной app.py, если не получается - упрощенную версию
-python app.py 2>nul
+REM Пробуем запустить современную версию app_modern.py
+echo [INFO] Запуск современного интерфейса...
+python app_modern.py 2>nul
 if errorlevel 1 (
     echo [INFO] Запуск упрощенной версии...
-    python app_simple.py
+    python app_simple.py 2>nul
+    if errorlevel 1 (
+        echo [ERROR] Не удалось запустить dashboard!
+        pause
+        exit /b 1
+    )
 ) else (
-    REM app.py запустился успешно
+    REM app_modern.py запустился успешно
 )
 
 pause

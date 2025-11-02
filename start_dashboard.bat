@@ -45,7 +45,12 @@ echo   Нажмите Ctrl+C для остановки
 echo ========================================
 echo.
 
-python app_simple.py
+REM Пробуем запустить современную версию
+python app_modern.py 2>nul
+if errorlevel 1 (
+    echo [INFO] Запуск упрощенной версии...
+    python app_simple.py
+)
 
 pause
 
