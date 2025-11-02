@@ -36,14 +36,15 @@ jobs:
     - name: Try to install TA-Lib (optional)
       continue-on-error: true
       run: |
-        wget http://prdownloads.sourceforge.net/ta-lib/ta-lib-0.4.0-src.tar.gz
-        tar -xzf ta-lib-0.4.0-src.tar.gz
-        cd ta-lib/
-        ./configure --prefix=/usr
-        make
-        sudo make install
-        cd ..
-        pip install TA-Lib
+        wget http://prdownloads.sourceforge.net/ta-lib/ta-lib-0.4.0-src.tar.gz || exit 0
+        tar -xzf ta-lib-0.4.0-src.tar.gz || exit 0
+        cd ta-lib/ || exit 0
+        ./configure --prefix=/usr || exit 0
+        make || exit 0
+        sudo make install || exit 0
+        cd .. || exit 0
+        pip install TA-Lib || exit 0
+        echo "TA-Lib installed successfully" || echo "TA-Lib optional - skipped"
     
     - name: Upgrade pip
       run: |
@@ -68,14 +69,17 @@ jobs:
     
     - name: Verify imports
       run: |
-        python -c "import pandas; import numpy; print('Core imports OK')"
-        python -c "import ccxt; print('CCXT OK')" || echo "CCXT optional"
-        python -c "import scipy; print('SciPy OK')" || echo "SciPy optional"
+        python -c "import pandas; import numpy; print('✓ Core imports OK')"
+        python -c "import ccxt; print('✓ CCXT OK')" || echo "⚠ CCXT optional"
+        python -c "import scipy; print('✓ SciPy OK')" || echo "⚠ SciPy optional"
+        python -c "import pytest; print('✓ Pytest OK')"
     
     - name: Run tests with pytest
       id: pytest
-      continue-on-error: true
       run: |
+        set -e  # Exit on error, but we'll catch it
+        
+        # Run pytest and capture exit code
         pytest tests/ \
           -v \
           --tb=short \
@@ -89,20 +93,88 @@ jobs:
           -W ignore::DeprecationWarning \
           -W ignore::PendingDeprecationWarning \
           --junit-xml=junit.xml \
-          || echo "exit_code=$?" >> $GITHUB_OUTPUT
+          --strict-markers \
+          ; pytest_exit=$?
+        
+        # Always create junit.xml even if tests fail
+        if [ ! -f junit.xml ]; then
+          echo '<?xml version="1.0"?><testsuite name="pytest" tests="0" failures="0" errors="0" skipped="0"></testsuite>' > junit.xml
+        fi
+        
+        # Set output
+        if [ ${pytest_exit} -eq 0 ]; then
+          echo "exit_code=0" >> $GITHUB_OUTPUT
+          echo "status=success" >> $GITHUB_OUTPUT
+        else
+          echo "exit_code=1" >> $GITHUB_OUTPUT
+          echo "status=failure" >> $GITHUB_OUTPUT
+        fi
+        
+        exit 0  # Don't fail this step, check in next step
     
     - name: Check test results
       if: always()
       run: |
-        if [ "${{ steps.pytest.outcome }}" == "failure" ]; then
-          echo "⚠️ Some tests failed, but continuing..."
-          # Show test summary
+        echo "📊 Analyzing test results..."
+        echo "================================"
+        
+        # Check if pytest step succeeded
+        if [ "${{ steps.pytest.outcome }}" == "failure" ] || [ "${{ steps.pytest.outputs.exit_code }}" == "1" ]; then
+          echo "❌ Pytest step failed"
           if [ -f junit.xml ]; then
-            echo "Test summary:"
-            grep -E "(testsuite|testcase|failure|error)" junit.xml | head -20 || true
+            echo "\nFailed tests:"
+            grep -E 'status="failed"|name=' junit.xml | grep -A 1 'status="failed"' | head -20 || true
+          fi
+          exit 1
+        fi
+        
+        # Parse junit.xml if it exists
+        if [ -f junit.xml ]; then
+          passed=$(grep -c 'status="passed"' junit.xml 2>/dev/null || echo "0")
+          failed=$(grep -c 'status="failed"' junit.xml 2>/dev/null || echo "0")
+          skipped=$(grep -c 'status="skipped"' junit.xml 2>/dev/null || echo "0")
+          errors=$(grep -c 'status="error"' junit.xml 2>/dev/null || echo "0")
+          
+          echo "✅ Passed: $passed"
+          echo "❌ Failed: $failed"
+          echo "⚠️  Errors: $errors"
+          echo "⏭️  Skipped: $skipped"
+          echo "================================"
+          
+          total=$((passed + failed + errors))
+          if [ "$total" -eq 0 ]; then
+            echo "⚠️  No tests found or executed"
+            exit 1
+          fi
+          
+          if [ "$failed" -gt 0 ] || [ "$errors" -gt 0 ]; then
+            echo "❌ Some tests failed or had errors"
+            if [ "$failed" -gt 0 ]; then
+              echo "\nFailed test details:"
+              grep -B 2 'status="failed"' junit.xml | grep 'name=' | head -10 || true
+            fi
+            exit 1
+          else
+            echo "✅ All tests passed!"
+            exit 0
           fi
         else
-          echo "✅ All tests passed!"
+          echo "⚠️  No junit.xml file found"
+          echo "Running quick verification..."
+          python -c "
+import sys
+sys.path.insert(0, '.')
+try:
+    from tests.conftest import sample_dataframe
+    import pandas as pd
+    import numpy as np
+    df = sample_dataframe()
+    assert len(df) > 0
+    print('✓ Basic test setup verified')
+except Exception as e:
+    print(f'✗ Test setup error: {e}')
+    sys.exit(1)
+" || exit 1
         fi
     
     - name: Upload test results
@@ -116,7 +188,7 @@ jobs:
         if-no-files-found: ignore
     
     - name: Upload coverage to Codecov
-      if: matrix.python-version == '3.10'
+      if: matrix.python-version == '3.10' && always()
       uses: codecov/codecov-action@v4
       with:
         files: ./coverage.xml
