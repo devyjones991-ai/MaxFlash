@@ -163,3 +163,4 @@ print(f"Cache hit rate: {cache_stats['hit_rate']:.1f}%")
 2. **Multiprocessing** для параллельных расчетов
 3. **Cython** для максимальной производительности
 4. **GPU ускорение** с CuPy для очень больших данных
+

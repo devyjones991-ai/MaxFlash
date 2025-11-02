@@ -133,3 +133,4 @@ def create_market_profile_chart(profile_data: Optional[Dict] = None) -> go.Figur
     
     return fig
 
+

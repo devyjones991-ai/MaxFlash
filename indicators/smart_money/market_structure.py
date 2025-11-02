@@ -340,3 +340,4 @@ class MarketStructureAnalyzer:
             'liquidity_high': last_row.get('liquidity_zone_high', None),
             'liquidity_low': last_row.get('liquidity_zone_low', None)
         }
+

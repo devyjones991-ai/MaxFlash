@@ -238,3 +238,4 @@ def create_price_chart_with_indicators(
     
     return fig
 
+

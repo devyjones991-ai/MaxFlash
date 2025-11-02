@@ -121,3 +121,4 @@ def create_footprint_chart(dataframe: Optional[pd.DataFrame] = None) -> go.Figur
     
     return fig
 
+

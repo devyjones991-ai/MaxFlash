@@ -8,3 +8,4 @@ echo "Running tests..."
 pytest tests/ -v
 
 echo "Tests completed!"
+

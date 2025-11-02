@@ -30,7 +30,18 @@
    - Total Return: 8.00%
 ```
 
+## ✨ Новые возможности
+
+- 🔴 **Real-time Monitoring** - WebSocket streaming для live обновлений цен
+- 🚨 **Anomaly Detection** - Автоматическое выявление аномалий в движении цен
+- 🤖 **Discord Bot** - Алерты и уведомления в Discord
+- 📊 **Stream Processing** - Потоковая обработка данных в реальном времени
+
+[Подробнее о Real-time Monitoring →](docs/REALTIME_MONITORING.md)
+
 ## 🚀 Быстрый старт
+
+**👥 Для партнеров:** [QUICK_START_PARTNER.md](QUICK_START_PARTNER.md) - простая инструкция с настройкой API
 
 ### 1. Установка
 
@@ -44,8 +55,20 @@ python scripts/setup_project.py
 
 # Или вручную
 pip install -r requirements.txt
-pip install pytest pytest-cov pytest-mock
+pip install pytest pytest-cov pytest-mock ccxt cachetools
 ```
+
+### 1.5. Настройка API (для реальных сигналов)
+
+Создайте файл `.env` в корне проекта:
+
+```env
+EXCHANGE_NAME=binance
+EXCHANGE_API_KEY=ваш_api_ключ
+EXCHANGE_API_SECRET=ваш_api_секрет
+```
+
+**Где получить:** [Инструкция для партнеров](QUICK_START_PARTNER.md#2️-настройка-api-обязательно-для-реальных-сигналов)
 
 ### 2. Запуск Web Dashboard (НОВОЕ! 🎉)
 

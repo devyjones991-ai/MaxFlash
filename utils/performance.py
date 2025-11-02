@@ -268,3 +268,4 @@ def batch_process(
 # Глобальный кэш и профайлер
 global_cache = PerformanceCache(maxsize=256)
 global_profiler = PerformanceProfiler()
+

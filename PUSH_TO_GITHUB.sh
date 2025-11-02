@@ -51,3 +51,4 @@ else
     echo ""
     echo "Проверьте инструкции в GITHUB_SETUP.md"
 fi
+

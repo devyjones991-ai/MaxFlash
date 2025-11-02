@@ -232,3 +232,4 @@ class VolumeProfileCalculatorOptimized:
         vah = bin_centers[upper_bound]
         
         return (val, vah)
+

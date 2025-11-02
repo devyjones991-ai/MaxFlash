@@ -85,3 +85,4 @@ def create_metrics_panel(metrics: Dict = None) -> list:
     
     return children
 
+

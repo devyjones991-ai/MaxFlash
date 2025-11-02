@@ -67,3 +67,4 @@ class InitialBalanceCalculator:
         """
         tolerance = ib_low * tolerance_pct
         return (ib_low - tolerance) <= price <= (ib_high + tolerance)
+

@@ -184,3 +184,4 @@ freqtrade backtesting --strategy SMCFootprintStrategy --timeframe 15m
 Система готова для интеграции с Freqtrade и начала торговли.
 
 **Удачной торговли! 📈**
+

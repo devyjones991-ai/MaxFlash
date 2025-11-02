@@ -125,3 +125,4 @@ class FreqtradeClient:
         except:
             return False
 
+

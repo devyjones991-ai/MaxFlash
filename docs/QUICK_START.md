@@ -169,3 +169,4 @@ freqtrade/user_data/strategies/
 ### Ошибки индикаторов
 
 Убедитесь, что все зависимости установлены: `pip install -r requirements.txt`
+

@@ -115,3 +115,4 @@ def create_backtest_results(backtest_data: Optional[Dict] = None) -> list:
         ])
     ]
 
+

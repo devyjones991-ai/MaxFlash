@@ -265,3 +265,4 @@ def test_strategy(mock_strategy):
 ```bash
 pytest tests/ --cov=indicators --cov=utils --cov=strategies --cov-report=term-missing
 ```
+

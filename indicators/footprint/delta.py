@@ -176,3 +176,4 @@ class DeltaAnalyzer:
             'divergence_detected': recent_data['delta_divergence'].notna().any(),
             'current_delta': recent_data['delta'].iloc[-1] if len(recent_data) > 0 else 0.0
         }
+

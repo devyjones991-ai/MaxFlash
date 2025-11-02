@@ -249,3 +249,4 @@ class FairValueGapDetector:
             List of active FVG dictionaries
         """
         return self.active_fvgs.copy()
+

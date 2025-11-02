@@ -101,3 +101,4 @@ class FootprintChart:
             'sell_volume': relevant_data['fp_sell_volume'].sum(),
             'total_volume': relevant_data['fp_total_volume'].sum()
         }
+

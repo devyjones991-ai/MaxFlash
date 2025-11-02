@@ -115,3 +115,4 @@ class DataValidator:
         if np.isnan(value) or np.isinf(value):
             return False
         return min_val <= value <= max_val
+

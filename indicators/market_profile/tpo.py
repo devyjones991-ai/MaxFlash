@@ -207,3 +207,4 @@ class TPOCalculator:
             'ib_high': last_row.get('tpo_ib_high', None),
             'ib_low': last_row.get('tpo_ib_low', None)
         }
+

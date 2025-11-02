@@ -127,3 +127,4 @@ def create_signals_panel(signals: List[Dict] = None) -> List:
         dbc.Alert("No active signals", color="secondary")
     ]
 
+

@@ -267,3 +267,4 @@ class RiskManager:
                 return (False, f"Risk:Reward ratio {risk_reward:.2f} below minimum {self.min_risk_reward_ratio}")
         
         return (True, "Trade valid")
+

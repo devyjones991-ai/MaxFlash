@@ -233,3 +233,4 @@ class MarketProfileCalculator:
             return 'trending'
         else:
             return 'balanced'
+

@@ -60,3 +60,4 @@ class IndicatorCalculationError(TradingSystemError):
 class StrategyExecutionError(TradingSystemError):
     """Ошибка выполнения стратегии."""
     pass
+

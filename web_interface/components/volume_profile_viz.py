@@ -187,3 +187,4 @@ def create_volume_profile_chart(
     
     return fig
 
+

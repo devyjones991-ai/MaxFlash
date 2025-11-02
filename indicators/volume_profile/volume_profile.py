@@ -293,3 +293,4 @@ class VolumeProfileCalculator:
             'lvn': lvn,
             'total_volume': last_row.get('vp_total_volume', 0.0)
         }
+

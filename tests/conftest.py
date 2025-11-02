@@ -37,3 +37,4 @@ def order_block_pattern():
         'close': prices,
         'volume': np.ones(30) * 1000
     }, index=dates[:30])
+
