@@ -54,7 +54,7 @@ build-backend = "setuptools.build_meta"
 
 [tool.ruff]
 line-length = 120
-target-version = "py39"
+target-version = "1.0.0"
 
 [tool.ruff.lint]
 select = [
@@ -67,6 +67,11 @@ select = [
     "UP",  # pyupgrade
     "ARG", # flake8-unused-arguments
     "SIM", # flake8-simplify
+    "N",   # pep8-naming
+    "S",   # flake8-bandit (security)
+    "T20", # flake8-print
+    "PT",  # flake8-pytest-style
+    "RUF", # Ruff-specific rules
 ]
 ignore = [
     "E501",  # line too long (handled by formatter)
@@ -85,7 +90,7 @@ skip-magic-trailing-comma = false
 line-ending = "auto"
 
 [tool.mypy]
-python_version = "3.9"
+python_version = "1.0.0"
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = false
@@ -122,6 +127,7 @@ markers = [
     "unit: Unit tests",
     "integration: Integration tests",
     "slow: Slow running tests",
+    "smoke: Smoke tests - quick checks for basic functionality",
 ]
 
 [tool.coverage.run]

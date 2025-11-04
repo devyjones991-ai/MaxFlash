@@ -74,6 +74,16 @@ jobs:
         python -c "import scipy; print('✓ SciPy OK')" || echo "⚠ SciPy optional"
         python -c "import pytest; print('✓ Pytest OK')"
     
+    - name: Run smoke tests first
+      id: smoke_tests
+      run: |
+        echo "🔥 Running smoke tests..."
+        pytest tests/test_smoke.py -v -m smoke --tb=short || {
+          echo "❌ Smoke tests failed!"
+          exit 1
+        }
+        echo "✅ Smoke tests passed!"
+    
     - name: Run tests with pytest
       id: pytest
       run: |

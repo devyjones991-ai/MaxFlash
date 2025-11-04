@@ -24,21 +24,23 @@ jobs:
     - name: Install linting tools
       run: |
         pip install --upgrade pip
-        pip install flake8>=6.0.0 black>=23.0.0
+        pip install ruff>=0.1.0 mypy>=1.7.0 pre-commit>=3.5.0
     
-    - name: Run flake8
+    - name: Run ruff lint
+      run: |
+        ruff check . --exclude=freqtrade,venv,__pycache__,.git
+    
+    - name: Run ruff format check
+      run: |
+        ruff format --check . --exclude=freqtrade,venv,__pycache__,.git
+    
+    - name: Run mypy type checking
       continue-on-error: true
       run: |
-        flake8 . \
-          --count \
-          --select=E9,F63,F7,F82 \
-          --show-source \
-          --statistics \
-          --max-line-length=120 \
-          --exclude=freqtrade,venv,__pycache__,.git || true
+        mypy . --ignore-missing-imports --exclude='freqtrade|venv|__pycache__' || true
     
-    - name: Check code formatting with black
-      continue-on-error: true
+    - name: Verify version sync
       run: |
-        black --check . --exclude='freqtrade|venv|__pycache__' || true
+        python scripts/sync_version.py
+        python -c "from version import get_version; print(f'✅ Version: {get_version()}')"
 

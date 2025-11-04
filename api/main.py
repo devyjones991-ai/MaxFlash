@@ -8,6 +8,14 @@ from typing import List, Optional
 from datetime import datetime
 import logging
 
+# Импорт версии из централизованного модуля
+try:
+    from version import get_version
+    VERSION = get_version()
+except ImportError:
+    # Fallback если модуль версии не найден
+    VERSION = "1.0.0"
+
 from api.models import (
     SignalModel,
     OrderBlockModel,
@@ -29,7 +37,7 @@ logger = logging.getLogger(__name__)
 app = FastAPI(
     title="MaxFlash Trading API",
     description="API для MaxFlash Trading System с Smart Money Concepts",
-    version="1.0.0",
+    version=VERSION,
     docs_url="/docs",
     redoc_url="/redoc"
 )
@@ -49,7 +57,7 @@ async def root():
     """Корневой endpoint."""
     return {
         "name": "MaxFlash Trading API",
-        "version": "1.0.0",
+        "version": VERSION,
         "docs": "/docs",
         "health": "/health"
     }
@@ -72,14 +80,14 @@ async def health_check():
         
         return HealthResponse(
             status="healthy",
-            version="1.0.0",
+            version=VERSION,
             services=services
         )
     except Exception as e:
         logger.error(f"Health check failed: {e}")
         return HealthResponse(
             status="degraded",
-            version="1.0.0",
+            version=VERSION,
             services={"error": str(e)}
         )
 

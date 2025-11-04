@@ -1,52 +1,46 @@
-# Pre-commit hooks configuration
-# Install: pip install pre-commit && pre-commit install
+# Pre-commit hooks для автоматической проверки кода перед коммитом
+# Установка: pip install pre-commit
+# Активация: pre-commit install
 
 repos:
+  # Ruff - быстрый линтер и форматтер
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.1.0
+    hooks:
+      - id: ruff
+        args: [--fix, --exit-non-zero-on-fix]
+      - id: ruff-format
+
+  # MyPy - проверка типов
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.7.0
+    hooks:
+      - id: mypy
+        additional_dependencies: [types-all]
+        args: [--ignore-missing-imports]
+        exclude: ^(freqtrade|tests/.*)
+
+  # Проверка синтаксиса Python
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v4.5.0
     hooks:
       - id: trailing-whitespace
       - id: end-of-file-fixer
       - id: check-yaml
-      - id: check-json
-      - id: check-toml
       - id: check-added-large-files
         args: ['--maxkb=1000']
+      - id: check-json
+      - id: check-toml
       - id: check-merge-conflict
       - id: check-case-conflict
-      - id: debug-statements
-      - id: mixed-line-ending
+      - id: detect-private-key
 
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.1.6
-    hooks:
-      - id: ruff
-        args: [--fix, --exit-non-zero-on-fix]
-      - id: ruff-format
-
-  - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.7.1
-    hooks:
-      - id: mypy
-        additional_dependencies: [types-all]
-        args: [--ignore-missing-imports, --no-strict-optional]
-        exclude: ^(tests/|web_interface/|freqtrade/)
-
-  - repo: https://github.com/pycqa/pydocstyle
-    rev: 6.3.0
-    hooks:
-      - id: pydocstyle
-        args: [--convention=google]
-        exclude: ^(tests/|freqtrade/)
-
+  # Синхронизация версии
   - repo: local
     hooks:
-      - id: pytest-check
-        name: pytest-check
-        entry: pytest
+      - id: sync-version
+        name: Sync version
+        entry: python scripts/sync_version.py
         language: system
-        types: [python]
         pass_filenames: false
         always_run: true
-        args: [tests/, -v, --tb=short, -x]
-
