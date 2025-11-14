@@ -170,14 +170,15 @@ def create_market_overview(
                             ),
                             dbc.Button("🔍", id="pair-search-btn")
                         ], size="sm", className="mt-2")
-                    ]),
-                    dbc.CardBody([
-                        dcc.Store(id='pairs-data-store', data={}),
-                        html.Div(
-                            create_pairs_table(tickers),
-                            id="pairs-table-container"
-                        )
-                    ])
+                           ]),
+                           dbc.CardBody([
+                               dcc.Store(id='pairs-data-store', data={}),
+                               dcc.Download(id="download-csv"),
+                               html.Div(
+                                   create_pairs_table(tickers),
+                                   id="pairs-table-container"
+                               )
+                           ])
                 ])
             ])
         ])

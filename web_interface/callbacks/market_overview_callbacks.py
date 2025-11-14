@@ -43,15 +43,78 @@ def register_market_overview_callbacks(app, data_manager=None):
     # Callback для сортировки таблицы
     @app.callback(
         Output('pairs-table-container', 'children', allow_duplicate=True),
-        [Input('pairs-table-header', 'n_clicks')],
+        [Input('sort-pair-btn', 'n_clicks'),
+         Input('sort-price-btn', 'n_clicks'),
+         Input('sort-change-btn', 'n_clicks'),
+         Input('sort-volume-btn', 'n_clicks')],
         [State('pairs-data-store', 'data'),
          State('pair-search-input', 'value')],
         prevent_initial_call=True
     )
-    def sort_pairs_table(_n_clicks, stored_data, search_query):
+    def sort_pairs_table(_pair, _price, _change, _volume, stored_data, search_query):
         """Сортировка таблицы пар."""
-        # Реализация сортировки будет добавлена
-        return update_pairs_table(None, None, None, search_query, stored_data)
+        ctx = callback_context
+        sort_by = 'volume'  # По умолчанию
+        
+        if ctx.triggered:
+            trigger_id = ctx.triggered[0]['prop_id'].split('.')[0]
+            if trigger_id == 'sort-pair-btn':
+                sort_by = 'pair'
+            elif trigger_id == 'sort-price-btn':
+                sort_by = 'price'
+            elif trigger_id == 'sort-change-btn':
+                sort_by = 'change'
+            elif trigger_id == 'sort-volume-btn':
+                sort_by = 'volume'
+        
+        # Получаем данные
+        if stored_data and 'tickers' in stored_data:
+            tickers = stored_data['tickers']
+        else:
+            tickers = async_loader.load_tickers_async(
+                POPULAR_PAIRS[:100], 'binance', max_workers=10
+            )
+            tickers = {k: v for k, v in tickers.items() if v is not None}
+        
+        # Подготавливаем данные
+        table_data = []
+        for symbol, ticker in tickers.items():
+            if search_query and search_query.lower() not in symbol.lower():
+                continue
+            
+            table_data.append({
+                'Pair': symbol,
+                'Price': ticker.get('last', 0),
+                'Change 24h': ticker.get('percentage', 0),
+                'Volume 24h': ticker.get('quoteVolume', 0),
+                'High 24h': ticker.get('high', 0),
+                'Low 24h': ticker.get('low', 0),
+                'Sector': get_sector_for_pair(symbol) or "Other"
+            })
+        
+        # Сортировка
+        if sort_by == 'pair':
+            table_data.sort(key=lambda x: x['Pair'], reverse=False)
+        elif sort_by == 'price':
+            table_data.sort(key=lambda x: x['Price'], reverse=True)
+        elif sort_by == 'change':
+            table_data.sort(key=lambda x: x['Change 24h'], reverse=True)
+        else:  # volume
+            table_data.sort(key=lambda x: x['Volume 24h'], reverse=True)
+        
+        # Создаем таблицу
+        from components.market_overview import create_pairs_table
+        return create_pairs_table(
+            {item['Pair']: {
+                'last': item['Price'],
+                'percentage': item['Change 24h'],
+                'quoteVolume': item['Volume 24h'],
+                'high': item['High 24h'],
+                'low': item['Low 24h']
+            } for item in table_data},
+            search_query,
+            50
+        )
     
     # Store для хранения состояния загруженных данных
     @app.callback(
