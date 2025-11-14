@@ -162,14 +162,19 @@ def create_market_overview(
                 dbc.Card([
                     dbc.CardHeader([
                         html.H5("📈 Все торговые пары", className="mb-0"),
-                        dbc.InputGroup([
-                            dbc.Input(
-                                id="pair-search-input",
-                                placeholder="Поиск пары...",
-                                type="text"
-                            ),
-                            dbc.Button("🔍", id="pair-search-btn")
-                        ], size="sm", className="mt-2")
+                               dbc.InputGroup([
+                                   dbc.Input(
+                                       id="pair-search-input",
+                                       placeholder="Поиск пары...",
+                                       type="text"
+                                   ),
+                                   dbc.Button("🔍", id="pair-search-btn"),
+                                   dbc.Button(
+                                       "📥 CSV", id="export-csv-btn",
+                                       color="secondary", size="sm",
+                                       title="Экспорт в CSV"
+                                   )
+                               ], size="sm", className="mt-2")
                            ]),
                            dbc.CardBody([
                                dcc.Store(id='pairs-data-store', data={}),
