@@ -87,6 +87,14 @@ def create_watchlist_item(
 
     change_color = "success" if change_24h >= 0 else "danger"
     change_icon = "📈" if change_24h >= 0 else "📉"
+    
+    # Форматирование цены в зависимости от размера
+    if price >= 1000:
+        price_str = f"${price:,.0f}"
+    elif price >= 1:
+        price_str = f"${price:,.2f}"
+    else:
+        price_str = f"${price:.4f}"
 
     return dbc.Card([
         dbc.CardBody([
@@ -95,32 +103,39 @@ def create_watchlist_item(
                     html.Button(
                         symbol,
                         id={"type": "watchlist-load", "symbol": symbol},
-                        className="btn btn-link p-0 text-start text-decoration-none",
-                        style={"color": "inherit", "font-weight": "bold", "border": "none", "background": "none"}
+                        className="btn btn-link p-0 text-start text-decoration-none fw-bold",
+                        style={
+                            "color": "inherit",
+                            "border": "none",
+                            "background": "none",
+                            "cursor": "pointer",
+                            "font-size": "0.95rem"
+                        }
                     ),
                     html.Br(),
                     html.Small(
                         f"{change_icon} {change_24h:+.2f}%",
-                        className=f"text-{change_color}"
+                        className=f"text-{change_color} fw-bold"
                     )
                 ], width=6),
                 dbc.Col([
-                    html.Strong(f"${price:,.2f}", className="text-primary"),
+                    html.Strong(price_str, className="text-primary"),
                     html.Br(),
                     html.Small(
-                        f"Vol: ${volume_24h:,.0f}",
+                        f"Vol: ${volume_24h:,.0f}" if volume_24h >= 1000 else f"Vol: ${volume_24h:,.2f}",
                         className="text-muted"
                     )
                 ], width=5, className="text-end"),
                 dbc.Col([
                     dbc.Button(
                         "❌", id={"type": "watchlist-remove", "symbol": symbol},
-                        color="danger", size="sm", outline=True
+                        color="danger", size="sm", outline=True,
+                        title="Удалить из отслеживания"
                     )
                 ], width=1)
             ], align="center")
         ])
-    ], className="mb-2", style={"cursor": "pointer"})
+    ], className="mb-2 watchlist-item", style={"cursor": "pointer", "transition": "all 0.2s"})
 
 
 def create_watchlist_items(

@@ -3,7 +3,7 @@ Callbacks для компонента Watchlist (отслеживание мон
 """
 import json
 from typing import List, Dict, Any, Optional
-from dash import Input, Output, State, callback_context
+from dash import Input, Output, State, callback_context, ClientsideFunction, ClientsideCallback
 from dash import html
 import dash_bootstrap_components as dbc
 
@@ -26,12 +26,48 @@ def register_watchlist_callbacks(app, data_manager=None):
     if data_manager is None:
         data_manager = MarketDataManager()
 
+    # Клиентский callback для сохранения в localStorage
+    app.clientside_callback(
+        """
+        function(data) {
+            if (data && data.symbols) {
+                localStorage.setItem('maxflash_watchlist', JSON.stringify(data.symbols));
+            }
+            return window.dash_clientside.no_update;
+        }
+        """,
+        Output('watchlist-store', 'data', allow_duplicate=True),
+        Input('watchlist-store', 'data'),
+        prevent_initial_call=True
+    )
+
+    # Клиентский callback для загрузки из localStorage при старте
+    app.clientside_callback(
+        """
+        function(n_clicks) {
+            const saved = localStorage.getItem('maxflash_watchlist');
+            if (saved) {
+                try {
+                    return {symbols: JSON.parse(saved)};
+                } catch(e) {
+                    return {symbols: ['BTC/USDT', 'ETH/USDT']};
+                }
+            }
+            return {symbols: ['BTC/USDT', 'ETH/USDT']};
+        }
+        """,
+        Output('watchlist-store', 'data', allow_duplicate=True),
+        Input('watchlist-interval', 'n_intervals'),
+        prevent_initial_call=False
+    )
+
     @app.callback(
-        Output('watchlist-store', 'data'),
+        Output('watchlist-store', 'data', allow_duplicate=True),
         [Input('watchlist-add-btn', 'n_clicks'),
          Input({'type': 'watchlist-remove', 'symbol': '*'}, 'n_clicks')],
         [State('watchlist-symbol-input', 'value'),
-         State('watchlist-store', 'data')]
+         State('watchlist-store', 'data')],
+        prevent_initial_call=True
     )
     def update_watchlist(_add_clicks, _remove_clicks, symbol_input, stored_data):
         """Обновить список отслеживаемых монет."""
