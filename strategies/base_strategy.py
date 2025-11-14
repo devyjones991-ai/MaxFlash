@@ -2,7 +2,6 @@
 Base strategy class with common methods for multi-timeframe analysis.
 Extends Freqtrade's IStrategy interface.
 """
-from typing import Dict, Optional
 from freqtrade.strategy import IStrategy
 import pandas as pd
 import numpy as np
@@ -92,7 +91,7 @@ class BaseStrategy(IStrategy):
         
         return swing_lows
     
-    def calculate_pivot_points(self, dataframe: pd.DataFrame, period: int = 20) -> Dict[str, pd.Series]:
+    def calculate_pivot_points(self, dataframe: pd.DataFrame, period: int = 20) -> dict[str, pd.Series]:
         """
         Calculate pivot points.
         

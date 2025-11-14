@@ -4,7 +4,7 @@ FastAPI backend для MaxFlash Trading System.
 from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from typing import List, Optional
+from typing import List
 from datetime import datetime
 import logging
 
@@ -28,6 +28,7 @@ from api.models import (
     HealthResponse,
     ErrorResponse
 )
+from api.market_api import router as market_router
 
 # Настройка логирования
 logging.basicConfig(level=logging.INFO)
@@ -50,6 +51,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Подключение роутеров
+app.include_router(market_router)
 
 
 @app.get("/", response_model=dict)
@@ -94,8 +98,8 @@ async def health_check():
 
 @app.get("/api/v1/signals", response_model=List[SignalModel])
 async def get_signals(
-    symbol: Optional[str] = None,
-    timeframe: Optional[str] = "15m",
+    symbol: str | None = None,
+    timeframe: str = "15m",
     limit: int = 10
 ):
     """
@@ -230,7 +234,7 @@ async def global_exception_handler(request, exc):
         content=ErrorResponse(
             error="Internal server error",
             detail=str(exc)
-        ).dict()
+        ).model_dump()
     )
 
 

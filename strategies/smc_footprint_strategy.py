@@ -3,7 +3,6 @@ Integrated Smart Money + Footprint + Volume Profile + Market Profile strategy.
 Top-down multi-timeframe analysis approach.
 """
 import logging
-from typing import Dict, Optional
 import pandas as pd
 import numpy as np
 
@@ -274,8 +273,8 @@ class SMCFootprintStrategy(BaseStrategy):
     def _analyze_macro_level(
         self,
         current_data: pd.Series,
-        macro_data: Optional[pd.Series]
-    ) -> Dict:
+        macro_data: pd.Series | None
+    ) -> dict:
         """Analyze macro level (Daily/4H)."""
         if macro_data is None:
             return {}
@@ -317,8 +316,8 @@ class SMCFootprintStrategy(BaseStrategy):
     def _analyze_intermediate_level(
         self,
         current_data: pd.Series,
-        intermediate_data: Optional[pd.Series]
-    ) -> Dict:
+        intermediate_data: pd.Series | None
+    ) -> dict:
         """Analyze intermediate level (1H)."""
         if intermediate_data is None:
             return {'in_value_area': True}  # Default to allow trading
@@ -343,7 +342,7 @@ class SMCFootprintStrategy(BaseStrategy):
         
         return analysis
     
-    def _analyze_micro_level(self, current_data: pd.Series) -> Dict:
+    def _analyze_micro_level(self, current_data: pd.Series) -> dict:
         """Analyze micro level (5-15min)."""
         analysis = {
             'delta_alignment': current_data.get('delta_alignment', 'neutral'),
@@ -364,9 +363,9 @@ class SMCFootprintStrategy(BaseStrategy):
     
     def _calculate_confluence(
         self,
-        macro: Dict,
-        intermediate: Dict,
-        micro: Dict
+        macro: dict,
+        intermediate: dict,
+        micro: dict
     ) -> int:
         """Calculate confluence score."""
         score = 0

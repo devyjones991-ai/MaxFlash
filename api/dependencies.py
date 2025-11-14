@@ -1,12 +1,11 @@
 """
 Зависимости для FastAPI endpoints.
 """
-from typing import Optional
 from fastapi import Header, HTTPException
 import os
 
 
-async def get_api_key(x_api_key: Optional[str] = Header(None)) -> str:
+async def get_api_key(x_api_key: str | None = Header(None)) -> str:
     """
     Проверка API ключа (опционально).
     
