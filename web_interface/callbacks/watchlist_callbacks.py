@@ -171,7 +171,8 @@ def register_watchlist_callbacks(app, data_manager=None):
     def load_all_pairs(_n_clicks):
         """Загрузить все доступные пары с биржи."""
         try:
-            all_pairs = data_manager.get_all_available_pairs('binance')
+            # Используем get_all_pairs из MarketDataManager
+            all_pairs = data_manager.get_all_pairs('binance')
             # Добавляем популярные пары в начало
             popular_set = set(POPULAR_PAIRS)
             other_pairs = [p for p in all_pairs if p not in popular_set]
@@ -179,6 +180,7 @@ def register_watchlist_callbacks(app, data_manager=None):
             return {'pairs': sorted_pairs}
         except Exception as e:
             logger.warning("Ошибка загрузки всех пар: %s", str(e))
+            # Fallback на популярные пары
             return {'pairs': POPULAR_PAIRS[:200]}
 
     # Callback для автодополнения в watchlist
