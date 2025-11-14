@@ -273,6 +273,32 @@ app.layout = dbc.Container([
                 ])
             ], className="mb-3"),
 
+            # Watchlist - Отслеживание монет
+            dbc.Card([
+                dbc.CardHeader("⭐ Отслеживание"),
+                dbc.CardBody([
+                    dbc.InputGroup([
+                        dbc.Input(
+                            id="watchlist-symbol-input",
+                            placeholder="BTC/USDT",
+                            type="text",
+                            size="sm"
+                        ),
+                        dbc.Button(
+                            "➕", id="watchlist-add-btn",
+                            color="success", size="sm"
+                        )
+                    ], size="sm"),
+                    html.Div(id="watchlist-items", className="mt-3"),
+                    dcc.Store(id='watchlist-store', data={'symbols': ['BTC/USDT', 'ETH/USDT']}),
+                    dcc.Interval(
+                        id='watchlist-interval',
+                        interval=5*1000,  # Обновление каждые 5 секунд
+                        n_intervals=0
+                    )
+                ])
+            ], className="mb-3"),
+
             # Quick Metrics
             dbc.Card([
                 dbc.CardHeader("📈 Quick Metrics"),
