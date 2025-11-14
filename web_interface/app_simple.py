@@ -4,7 +4,7 @@
 """
 try:
     import dash
-    from dash import dcc, html
+    from dash import dcc, html, Input, Output
     import dash_bootstrap_components as dbc
     import plotly.graph_objects as go
     import pandas as pd
@@ -64,8 +64,8 @@ def create_simple_app():
     ], fluid=True)
     
     @app.callback(
-        dcc.Output('interval', 'disabled'),
-        [dcc.Input('interval', 'n_intervals')]
+        Output('interval', 'disabled'),
+        [Input('interval', 'n_intervals')]
     )
     def update_chart(n):
         return False
@@ -101,6 +101,6 @@ if __name__ == '__main__':
     print("Dashboard доступен: http://localhost:8050")
     print("Нажмите Ctrl+C для остановки")
     print("="*60 + "\n")
-    app.run_server(debug=True, host='0.0.0.0', port=8050)
+    app.run(debug=True, host='0.0.0.0', port=8050)
 
 

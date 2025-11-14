@@ -20,7 +20,8 @@ from config.market_config import (
 
 def create_market_overview(
     data_manager: Optional[MarketDataManager] = None,
-    analytics: Optional[MarketAnalytics] = None
+    analytics: Optional[MarketAnalytics] = None,
+    alerts: Optional[MarketAlerts] = None
 ) -> html.Div:
     """
     Создать компонент Market Overview.
@@ -28,6 +29,7 @@ def create_market_overview(
     Args:
         data_manager: Менеджер данных рынка
         analytics: Аналитика рынка
+        alerts: Система алертов
 
     Returns:
         HTML компонент с обзором рынка
