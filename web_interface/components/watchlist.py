@@ -36,27 +36,71 @@ def create_watchlist_panel(
         dbc.Card([
             dbc.CardHeader([
                 html.H5("⭐ Отслеживаемые монеты", className="mb-0"),
-                dbc.InputGroup([
-                    dbc.Input(
-                        id="watchlist-symbol-input",
-                        placeholder="BTC/USDT",
-                        type="text",
-                        style={"maxWidth": "200px"}
-                    ),
-                    dbc.Button(
-                        "➕ Добавить", id="watchlist-add-btn",
-                        color="success", size="sm"
+                html.Div([
+                    dbc.InputGroup([
+                        dbc.Input(
+                            id="watchlist-symbol-input",
+                            placeholder="Поиск монеты... (BTC, ETH, SOL...)",
+                            type="text",
+                            style={"maxWidth": "180px"},
+                            autoComplete="off"
+                        ),
+                        dbc.Button(
+                            "🔍", id="watchlist-search-btn",
+                            color="info", size="sm",
+                            title="Поиск всех монет"
+                        ),
+                        dbc.Button(
+                            "➕", id="watchlist-add-btn",
+                            color="success", size="sm",
+                            title="Добавить монету"
+                        )
+                    ], size="sm", className="mt-2"),
+                    html.Div(
+                        id="watchlist-suggestions",
+                        className="position-absolute bg-dark border rounded mt-1",
+                        style={
+                            "zIndex": 1000,
+                            "maxHeight": "200px",
+                            "overflowY": "auto",
+                            "display": "none",
+                            "width": "250px",
+                            "maxWidth": "100%"
+                        }
                     )
-                ], size="sm", className="mt-2")
+                ], className="position-relative")
             ]),
             dbc.CardBody([
                 dcc.Store(id='watchlist-store', data={'symbols': ['BTC/USDT', 'ETH/USDT']}),
+                dcc.Store(id='all-pairs-store', data={'pairs': []}),
                 html.Div(id="watchlist-items"),
                 dcc.Interval(
                     id='watchlist-interval',
                     interval=5*1000,  # Обновление каждые 5 секунд
                     n_intervals=0
-                )
+                ),
+                # Модальное окно для выбора всех пар
+                dbc.Modal([
+                    dbc.ModalHeader("🔍 Все доступные монеты"),
+                    dbc.ModalBody([
+                        dbc.Input(
+                            id="all-pairs-search",
+                            placeholder="Поиск...",
+                            type="text",
+                            className="mb-3"
+                        ),
+                        html.Div(
+                            id="all-pairs-list",
+                            style={
+                                "maxHeight": "400px",
+                                "overflowY": "auto"
+                            }
+                        )
+                    ]),
+                    dbc.ModalFooter([
+                        dbc.Button("Закрыть", id="close-all-pairs-modal", className="ms-auto")
+                    ])
+                ], id="all-pairs-modal", is_open=False, size="lg")
             ])
         ])
     ])
