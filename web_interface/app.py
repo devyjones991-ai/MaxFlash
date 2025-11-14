@@ -696,11 +696,27 @@ try:
         from callbacks.market_overview_callbacks import (
             register_market_overview_callbacks
         )
+        from callbacks.watchlist_callbacks import (
+            register_watchlist_callbacks
+        )
+        from callbacks.symbol_autocomplete_callbacks import (
+            register_symbol_autocomplete_callbacks
+        )
+        from callbacks.price_alerts_callbacks import (
+            register_price_alerts_callbacks
+        )
+        from callbacks.export_callbacks import (
+            register_export_callbacks
+        )
         from utils.market_data_manager import MarketDataManager
 
         data_manager = MarketDataManager()
         register_multi_view_callbacks(app, data_manager)
         register_market_overview_callbacks(app, data_manager)
+        register_watchlist_callbacks(app, data_manager)
+        register_symbol_autocomplete_callbacks(app, data_manager)
+        register_price_alerts_callbacks(app, data_manager)
+        register_export_callbacks(app, data_manager)
 except (ImportError, AttributeError) as e:
     # Callbacks не обязательны для базовой работы
     logger.debug("Callbacks не загружены: %s", str(e))
