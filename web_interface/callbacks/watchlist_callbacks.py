@@ -121,14 +121,28 @@ def register_watchlist_callbacks(app, data_manager=None):
 
     @app.callback(
         Output('watchlist-symbol-input', 'value'),
-        [Input('watchlist-add-btn', 'n_clicks')],
+        [Input('watchlist-add-btn', 'n_clicks'),
+         Input('watchlist-quick-BTC', 'n_clicks'),
+         Input('watchlist-quick-ETH', 'n_clicks'),
+         Input('watchlist-quick-SOL', 'n_clicks'),
+         Input('watchlist-quick-BNB', 'n_clicks')],
         [State('watchlist-symbol-input', 'value')]
     )
-    def clear_watchlist_input(_n_clicks, current_value):
-        """Очистить поле ввода после добавления."""
+    def clear_watchlist_input(_add, _btc, _eth, _sol, _bnb, current_value):
+        """Очистить поле ввода после добавления или быстрого выбора."""
         ctx = callback_context
-        if ctx.triggered and 'watchlist-add-btn' in ctx.triggered[0]['prop_id']:
-            return ""  # Очищаем поле после добавления
+        if ctx.triggered:
+            trigger_id = ctx.triggered[0]['prop_id'].split('.')[0]
+            if trigger_id == 'watchlist-add-btn':
+                return ""  # Очищаем поле после добавления
+            elif trigger_id == 'watchlist-quick-BTC':
+                return "BTC/USDT"
+            elif trigger_id == 'watchlist-quick-ETH':
+                return "ETH/USDT"
+            elif trigger_id == 'watchlist-quick-SOL':
+                return "SOL/USDT"
+            elif trigger_id == 'watchlist-quick-BNB':
+                return "BNB/USDT"
         return current_value
 
     @app.callback(

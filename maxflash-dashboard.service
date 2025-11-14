@@ -1,0 +1,21 @@
+[Unit]
+Description=MaxFlash Trading Dashboard
+After=network.target
+
+[Service]
+Type=simple
+User=%i
+WorkingDirectory=/path/to/MaxFlash/web_interface
+ExecStart=/usr/bin/python3 /path/to/MaxFlash/web_interface/app_simple.py
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+# Ограничения ресурсов (опционально)
+# MemoryLimit=512M
+# CPUQuota=50%
+
+[Install]
+WantedBy=multi-user.target
+

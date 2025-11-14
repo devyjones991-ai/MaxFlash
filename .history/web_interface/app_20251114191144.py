@@ -33,9 +33,7 @@ with contextlib.suppress(ImportError):
 logger = setup_logging()
 
 
-def fetch_market_data(
-    symbol: str, timeframe: str = "15m", limit: int = 200
-):
+def fetch_market_data(symbol: str, timeframe: str = "15m", limit: int = 200):
     """
     Загружает рыночные данные для указанного символа.
     
@@ -79,17 +77,14 @@ def fetch_market_data(
             )
             df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
             df.set_index('timestamp', inplace=True)
-
-            logger.info("Загружены данные для %s: %s свечей", symbol, len(df))
+            
+            logger.info(f"Загружены данные для {symbol}: {len(df)} свечей")
             return df
             
         except ImportError:
             logger.warning("CCXT не установлен, используем тестовые данные")
         except Exception as e:
-            logger.warning(
-                "Ошибка загрузки через CCXT: %s, используем тестовые данные",
-                str(e)
-            )
+            logger.warning(f"Ошибка загрузки через CCXT: {e}, используем тестовые данные")
         
         # Fallback: генерируем тестовые данные с учетом символа
         dates = pd.date_range(
@@ -97,8 +92,7 @@ def fetch_market_data(
             periods=limit,
             freq='15min'
         )
-        # Разные данные для разных символов
-        np.random.seed(hash(symbol) % 1000)
+        np.random.seed(hash(symbol) % 1000)  # Разные данные для разных символов
         
         # Базовые цены для популярных пар
         base_prices = {
@@ -109,8 +103,7 @@ def fetch_market_data(
         }
         base_price = base_prices.get(symbol, 1000)
         
-        price_change = base_price * 0.01
-        prices = base_price + np.cumsum(np.random.randn(limit) * price_change)
+        prices = base_price + np.cumsum(np.random.randn(limit) * (base_price * 0.01))
         
         df = pd.DataFrame({
             'open': prices * 0.999,
@@ -120,11 +113,11 @@ def fetch_market_data(
             'volume': np.random.uniform(1000000, 5000000, limit)
         }, index=dates)
         
-        logger.info("Сгенерированы тестовые данные для %s", symbol)
+        logger.info(f"Сгенерированы тестовые данные для {symbol}")
         return df
         
     except Exception as e:
-        logger.error("Ошибка загрузки данных для %s: %s", symbol, str(e))
+        logger.error(f"Ошибка загрузки данных для {symbol}: {e}")
         # Возвращаем минимальный DataFrame
         dates = pd.date_range(start='2024-01-01', periods=100, freq='15min')
         return pd.DataFrame({
@@ -204,49 +197,20 @@ app.layout = dbc.Container([
                                     className="mb-0")
                         ], width="auto"),
                         dbc.Col([
-                            html.Div([
-                                dbc.InputGroup([
-                                    dbc.InputGroupText("💰"),
-                                    dbc.Input(
-                                        id="symbol-input",
-                                        placeholder="BTC/USDT",
-                                        value="BTC/USDT",
-                                        type="text",
-                                        style={"maxWidth": "200px"},
-                                        autoComplete="off"
-                                    ),
-                                    dbc.DropdownMenu(
-                                        label="📋",
-                                        children=[
-                                            dbc.DropdownMenuItem("BTC/USDT", id="quick-BTC-USDT"),
-                                            dbc.DropdownMenuItem("ETH/USDT", id="quick-ETH-USDT"),
-                                            dbc.DropdownMenuItem("SOL/USDT", id="quick-SOL-USDT"),
-                                            dbc.DropdownMenuItem("BNB/USDT", id="quick-BNB-USDT"),
-                                            dbc.DropdownMenuItem("XRP/USDT", id="quick-XRP-USDT"),
-                                            dbc.DropdownMenuItem("ADA/USDT", id="quick-ADA-USDT"),
-                                            dbc.DropdownMenuItem("DOGE/USDT", id="quick-DOGE-USDT"),
-                                            dbc.DropdownMenuItem("AVAX/USDT", id="quick-AVAX-USDT"),
-                                        ],
-                                        toggle_style={"padding": "0.25rem 0.5rem"},
-                                        direction="down"
-                                    ),
-                                    dbc.Button(
-                                        "Load", id="load-symbol-btn",
-                                        color="primary", size="sm"
-                                    )
-                                ], size="sm"),
-                                html.Div(
-                                    id="symbol-input-suggestions",
-                                    className="position-absolute bg-dark border rounded",
-                                    style={
-                                        "zIndex": 1000,
-                                        "maxHeight": "200px",
-                                        "overflowY": "auto",
-                                        "display": "none",
-                                        "width": "200px"
-                                    }
+                            dbc.InputGroup([
+                                dbc.InputGroupText("💰"),
+                                dbc.Input(
+                                    id="symbol-input",
+                                    placeholder="BTC/USDT",
+                                    value="BTC/USDT",
+                                    type="text",
+                                    style={"maxWidth": "150px"}
+                                ),
+                                dbc.Button(
+                                    "Load", id="load-symbol-btn",
+                                    color="primary", size="sm"
                                 )
-                            ], className="position-relative")
+                            ], size="sm")
                         ], width="auto", className="ms-auto"),
                         dbc.Col([
                             dbc.ButtonGroup([
@@ -302,89 +266,6 @@ app.layout = dbc.Container([
                 ])
             ], className="mb-3"),
 
-            # Watchlist - Отслеживание монет
-            dbc.Card([
-                dbc.CardHeader("⭐ Отслеживание"),
-                dbc.CardBody([
-                    dbc.InputGroup([
-                        dbc.Input(
-                            id="watchlist-symbol-input",
-                            placeholder="BTC/USDT",
-                            type="text",
-                            size="sm",
-                            autoComplete="off"
-                        ),
-                        dbc.DropdownMenu(
-                            label="📋",
-                            children=[
-                                dbc.DropdownMenuItem("BTC/USDT", id="watchlist-quick-BTC"),
-                                dbc.DropdownMenuItem("ETH/USDT", id="watchlist-quick-ETH"),
-                                dbc.DropdownMenuItem("SOL/USDT", id="watchlist-quick-SOL"),
-                                dbc.DropdownMenuItem("BNB/USDT", id="watchlist-quick-BNB"),
-                            ],
-                            toggle_style={"padding": "0.25rem 0.5rem"},
-                            direction="down",
-                            size="sm"
-                        ),
-                        dbc.Button(
-                            "➕", id="watchlist-add-btn",
-                            color="success", size="sm"
-                        )
-                    ], size="sm"),
-                    html.Div(id="watchlist-items", className="mt-3"),
-                    dcc.Store(id='watchlist-store', data={'symbols': ['BTC/USDT', 'ETH/USDT']}),
-                    dcc.Interval(
-                        id='watchlist-interval',
-                        interval=5*1000,  # Обновление каждые 5 секунд
-                        n_intervals=0
-                    )
-                ])
-            ], className="mb-3"),
-
-            # Price Alerts - Уведомления о ценах
-            dbc.Card([
-                dbc.CardHeader("🔔 Уведомления"),
-                dbc.CardBody([
-                    dbc.InputGroup([
-                        dbc.Input(
-                            id="alert-symbol-input",
-                            placeholder="BTC/USDT",
-                            type="text",
-                            size="sm",
-                            style={"maxWidth": "100px"}
-                        ),
-                        dbc.Input(
-                            id="alert-price-input",
-                            placeholder="Цена",
-                            type="number",
-                            size="sm",
-                            style={"maxWidth": "80px"}
-                        ),
-                        dbc.Select(
-                            id="alert-type-select",
-                            options=[
-                                {"label": "Выше", "value": "above"},
-                                {"label": "Ниже", "value": "below"}
-                            ],
-                            value="above",
-                            size="sm",
-                            style={"maxWidth": "70px"}
-                        ),
-                        dbc.Button(
-                            "➕", id="alert-add-btn",
-                            color="warning", size="sm"
-                        )
-                    ], size="sm"),
-                    html.Div(id="active-alerts-list", className="mt-2"),
-                    dcc.Store(id='alerts-store', data={'alerts': []}),
-                    dcc.Interval(
-                        id='alerts-check-interval',
-                        interval=3*1000,  # Проверка каждые 3 секунды
-                        n_intervals=0
-                    )
-                ])
-            ], className="mb-3"),
-
             # Quick Metrics
             dbc.Card([
                 dbc.CardHeader("📈 Quick Metrics"),
@@ -416,15 +297,6 @@ app.layout = dbc.Container([
                         dbc.Tab(label="⚡ Real-time Signals",
                                 tab_id="signals",
                                 activeTabClassName="fw-bold"),
-                        dbc.Tab(label="🌐 Market Overview",
-                                tab_id="market-overview",
-                                activeTabClassName="fw-bold"),
-                        dbc.Tab(label="📊 Multi-View",
-                                tab_id="multi-view",
-                                activeTabClassName="fw-bold"),
-                        dbc.Tab(label="🏢 Sector Analysis",
-                                tab_id="sector-analysis",
-                                activeTabClassName="fw-bold"),
                     ], id="tabs", active_tab="footprint"),
                     html.Div(id="tab-content", className="mt-3")
                 ])
@@ -448,18 +320,14 @@ app.layout = dbc.Container([
     [State('price-chart', 'figure'),
      State('symbol-input', 'value')]
 )
-def update_dashboard(
-    _n_intervals, _refresh_clicks, _load_clicks, _existing_figure, symbol
-):
+def update_dashboard(_n_intervals, _refresh_clicks, _load_clicks, _existing_figure, symbol):
     """
     Обновление всех компонентов dashboard.
     """
     try:
         # Получаем символ (по умолчанию BTC/USDT)
         # Обрабатываем случай, когда symbol может быть None
-        if symbol is None:
-            symbol = "BTC/USDT"
-        elif isinstance(symbol, str) and symbol.strip() == "":
+        if symbol is None or (isinstance(symbol, str) and symbol.strip() == ""):
             symbol = "BTC/USDT"
         else:
             symbol = str(symbol).strip().upper()
@@ -470,17 +338,7 @@ def update_dashboard(
                 create_price_chart_with_indicators,
             )
             # Загружаем данные для выбранного символа
-            # Используем новый MarketDataManager если доступен
-            try:
-                from utils.market_data_manager import MarketDataManager
-                data_manager = MarketDataManager()
-                dataframe = data_manager.get_ohlcv(
-                    symbol, timeframe='15m', limit=200,
-                    exchange_id='binance'
-                )
-            except ImportError:
-                # Fallback на старую функцию
-                dataframe = fetch_market_data(symbol)  # noqa: F821
+            dataframe = fetch_market_data(symbol)
             price_fig = create_price_chart_with_indicators(
                 dataframe=dataframe
             )
@@ -498,7 +356,7 @@ def update_dashboard(
                 create_volume_profile_chart,
             )
             # Используем данные для volume profile
-            if dataframe is not None and not dataframe.empty:
+            if 'dataframe' in locals() and dataframe is not None:
                 # Извлекаем данные из dataframe для volume profile
                 price_levels = dataframe['close'].values
                 volumes = dataframe['volume'].values
@@ -632,45 +490,6 @@ def update_tab_content(active_tab):
                 msg = "Signals компонент не найден"
                 return html.Div([dbc.Alert(msg, color="info")])
 
-        if active_tab == "market-overview":
-            try:
-                from components.market_overview import create_market_overview
-                from utils.market_data_manager import MarketDataManager
-                from utils.market_analytics import MarketAnalytics
-                from utils.market_alerts import MarketAlerts
-
-                data_manager = MarketDataManager()
-                analytics = MarketAnalytics(data_manager)
-                alerts = MarketAlerts(data_manager)
-                return create_market_overview(data_manager, analytics, alerts)
-            except ImportError as e:
-                msg = f"Market Overview компонент не найден: {str(e)}"
-                return html.Div([dbc.Alert(msg, color="info")])
-
-        if active_tab == "multi-view":
-            try:
-                from components.multi_chart_view import create_multi_chart_view
-                from utils.market_data_manager import MarketDataManager
-
-                data_manager = MarketDataManager()
-                return create_multi_chart_view(data_manager)
-            except ImportError as e:
-                msg = f"Multi-View компонент не найден: {str(e)}"
-                return html.Div([dbc.Alert(msg, color="info")])
-
-        if active_tab == "sector-analysis":
-            try:
-                from components.sector_analysis import create_sector_analysis
-                from utils.market_data_manager import MarketDataManager
-                from utils.market_analytics import MarketAnalytics
-
-                data_manager = MarketDataManager()
-                analytics = MarketAnalytics(data_manager)
-                return create_sector_analysis(data_manager, analytics)
-            except ImportError as e:
-                msg = f"Sector Analysis компонент не найден: {str(e)}"
-                return html.Div([dbc.Alert(msg, color="info")])
-
     except (  # noqa: BLE001
         ImportError, AttributeError, KeyError, ValueError
     ) as e:
@@ -681,29 +500,6 @@ def update_tab_content(active_tab):
         ])
 
     return html.Div()
-
-
-# Регистрация callbacks для Multi-View и Market Overview
-try:
-    import sys
-    from pathlib import Path
-    callbacks_path = Path(__file__).parent / 'callbacks'
-    if callbacks_path.exists():
-        sys.path.insert(0, str(callbacks_path.parent))
-        from callbacks.multi_view_callbacks import (
-            register_multi_view_callbacks
-        )
-        from callbacks.market_overview_callbacks import (
-            register_market_overview_callbacks
-        )
-        from utils.market_data_manager import MarketDataManager
-
-        data_manager = MarketDataManager()
-        register_multi_view_callbacks(app, data_manager)
-        register_market_overview_callbacks(app, data_manager)
-except (ImportError, AttributeError) as e:
-    # Callbacks не обязательны для базовой работы
-    logger.debug("Callbacks не загружены: %s", str(e))
 
 
 if __name__ == '__main__':
@@ -720,55 +516,6 @@ if __name__ == '__main__':
 
     logger.info("Starting MaxFlash Trading System Dashboard")
     logger.info("Dashboard available at: http://localhost:8050")
-
-    # Запускаем фоновый мониторинг рынка
-    try:
-        from utils.market_monitor import MarketMonitor
-        from utils.market_data_manager import MarketDataManager
-        from utils.market_alerts import MarketAlerts
-
-        data_manager = MarketDataManager()
-        alerts = MarketAlerts(data_manager)
-        market_monitor = MarketMonitor(
-            data_manager=data_manager,
-            alerts=alerts,
-            monitoring_interval=30  # Проверка каждые 30 секунд
-        )
-        market_monitor.start()
-        logger.info("Фоновый мониторинг рынка запущен")
-    except Exception as e:
-        logger.warning("Не удалось запустить мониторинг рынка: %s", str(e))
-
-    # Запускаем WebSocket для real-time обновлений
-    try:
-        from utils.websocket_manager import get_websocket_manager
-        from config.market_config import POPULAR_PAIRS
-
-        ws_manager = get_websocket_manager('binance')
-        if ws_manager.is_available:
-            # Подписываемся на популярные пары для real-time обновлений
-            popular_symbols = POPULAR_PAIRS[:20]  # Топ-20 для начала
-            
-            def price_update_callback(price_data):
-                """Callback для обновлений цен через WebSocket."""
-                logger.debug(
-                    "Real-time обновление: %s = $%.2f",
-                    price_data.get('symbol'),
-                    price_data.get('price', 0)
-                )
-
-            for symbol in popular_symbols:
-                ws_manager.subscribe(symbol, price_update_callback)
-            
-            ws_manager.start()
-            logger.info(
-                "WebSocket real-time обновления запущены для %s пар",
-                len(popular_symbols)
-            )
-        else:
-            logger.info("WebSocket недоступен, используем polling")
-    except Exception as e:
-        logger.warning("Не удалось запустить WebSocket: %s", str(e))
 
     # Запускаем открытие браузера в фоне
     # (если не запущено через run.py)

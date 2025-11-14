@@ -321,10 +321,34 @@ def create_pairs_table(
             dbc.Table([
                 html.Thead([
                     html.Tr([
-                        html.Th("Pair", style={"cursor": "pointer"}),
-                        html.Th("Price", style={"cursor": "pointer"}),
-                        html.Th("Change 24h", style={"cursor": "pointer"}),
-                        html.Th("Volume 24h", style={"cursor": "pointer"}),
+                        html.Th([
+                            "Pair",
+                            dbc.Button(
+                                "⇅", id="sort-pair-btn",
+                                size="sm", color="link", className="ms-1 p-0"
+                            )
+                        ], style={"cursor": "pointer"}),
+                        html.Th([
+                            "Price",
+                            dbc.Button(
+                                "⇅", id="sort-price-btn",
+                                size="sm", color="link", className="ms-1 p-0"
+                            )
+                        ], style={"cursor": "pointer"}),
+                        html.Th([
+                            "Change 24h",
+                            dbc.Button(
+                                "⇅", id="sort-change-btn",
+                                size="sm", color="link", className="ms-1 p-0"
+                            )
+                        ], style={"cursor": "pointer"}),
+                        html.Th([
+                            "Volume 24h",
+                            dbc.Button(
+                                "⇅", id="sort-volume-btn",
+                                size="sm", color="link", className="ms-1 p-0"
+                            )
+                        ], style={"cursor": "pointer"}),
                         html.Th("High 24h"),
                         html.Th("Low 24h"),
                         html.Th("Sector")

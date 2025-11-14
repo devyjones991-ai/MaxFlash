@@ -39,6 +39,19 @@ def register_market_overview_callbacks(app, data_manager=None):
         data_manager = MarketDataManager()
 
     async_loader = AsyncDataLoader(data_manager)
+
+    # Callback для сортировки таблицы
+    @app.callback(
+        Output('pairs-table-container', 'children', allow_duplicate=True),
+        [Input('pairs-table-header', 'n_clicks')],
+        [State('pairs-data-store', 'data'),
+         State('pair-search-input', 'value')],
+        prevent_initial_call=True
+    )
+    def sort_pairs_table(_n_clicks, stored_data, search_query):
+        """Сортировка таблицы пар."""
+        # Реализация сортировки будет добавлена
+        return update_pairs_table(None, None, None, search_query, stored_data)
     
     # Store для хранения состояния загруженных данных
     @app.callback(
