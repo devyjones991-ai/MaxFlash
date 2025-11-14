@@ -304,40 +304,73 @@ app.layout = dbc.Container([
 
             # Watchlist - Отслеживание монет
             dbc.Card([
-                dbc.CardHeader("⭐ Отслеживание"),
-                dbc.CardBody([
-                    dbc.InputGroup([
-                        dbc.Input(
-                            id="watchlist-symbol-input",
-                            placeholder="BTC/USDT",
-                            type="text",
-                            size="sm",
-                            autoComplete="off"
-                        ),
-                        dbc.DropdownMenu(
-                            label="📋",
-                            children=[
-                                dbc.DropdownMenuItem("BTC/USDT", id="watchlist-quick-BTC"),
-                                dbc.DropdownMenuItem("ETH/USDT", id="watchlist-quick-ETH"),
-                                dbc.DropdownMenuItem("SOL/USDT", id="watchlist-quick-SOL"),
-                                dbc.DropdownMenuItem("BNB/USDT", id="watchlist-quick-BNB"),
-                            ],
-                            toggle_style={"padding": "0.25rem 0.5rem"},
-                            direction="down",
-                            size="sm"
-                        ),
-                        dbc.Button(
-                            "➕", id="watchlist-add-btn",
-                            color="success", size="sm"
+                dbc.CardHeader([
+                    html.H5("⭐ Отслеживание", className="mb-0"),
+                    html.Div([
+                        dbc.InputGroup([
+                            dbc.Input(
+                                id="watchlist-symbol-input",
+                                placeholder="Поиск монеты... (BTC, ETH, SOL...)",
+                                type="text",
+                                size="sm",
+                                style={"maxWidth": "150px"},
+                                autoComplete="off"
+                            ),
+                            dbc.Button(
+                                "🔍", id="watchlist-search-btn",
+                                color="info", size="sm",
+                                title="Поиск всех монет"
+                            ),
+                            dbc.Button(
+                                "➕", id="watchlist-add-btn",
+                                color="success", size="sm",
+                                title="Добавить монету"
+                            )
+                        ], size="sm", className="mt-2"),
+                        html.Div(
+                            id="watchlist-suggestions",
+                            className="position-absolute bg-dark border rounded mt-1",
+                            style={
+                                "zIndex": 1000,
+                                "maxHeight": "200px",
+                                "overflowY": "auto",
+                                "display": "none",
+                                "width": "200px"
+                            }
                         )
-                    ], size="sm"),
-                    html.Div(id="watchlist-items", className="mt-3"),
+                    ], className="position-relative")
+                ]),
+                dbc.CardBody([
                     dcc.Store(id='watchlist-store', data={'symbols': ['BTC/USDT', 'ETH/USDT']}),
+                    dcc.Store(id='all-pairs-store', data={'pairs': []}),
+                    html.Div(id="watchlist-items", className="mt-3"),
                     dcc.Interval(
                         id='watchlist-interval',
                         interval=5*1000,  # Обновление каждые 5 секунд
                         n_intervals=0
-                    )
+                    ),
+                    # Модальное окно для выбора всех пар
+                    dbc.Modal([
+                        dbc.ModalHeader("🔍 Все доступные монеты"),
+                        dbc.ModalBody([
+                            dbc.Input(
+                                id="all-pairs-search",
+                                placeholder="Поиск...",
+                                type="text",
+                                className="mb-3"
+                            ),
+                            html.Div(
+                                id="all-pairs-list",
+                                style={
+                                    "maxHeight": "400px",
+                                    "overflowY": "auto"
+                                }
+                            )
+                        ]),
+                        dbc.ModalFooter([
+                            dbc.Button("Закрыть", id="close-all-pairs-modal", className="ms-auto")
+                        ])
+                    ], id="all-pairs-modal", is_open=False, size="lg")
                 ])
             ], className="mb-3"),
 
