@@ -178,8 +178,9 @@ app.layout = dbc.Container([
                                    outline=True, color="primary"),
                         dbc.Button("⚙️ Настройки", id="settings-btn",
                                    outline=True, color="secondary"),
-                    ])
-                ], width="auto", className="ms-auto")
+                    ]),
+                    html.Div(id="help-button-container", className="ms-2")
+                ], width="auto", className="ms-auto d-flex align-items-center")
             ], align="center")
         ], fluid=True)
     ], color="dark", dark=True, className="mb-4"),
@@ -191,6 +192,9 @@ app.layout = dbc.Container([
                       className="mb-3", dismissable=True)
         ])
     ]),
+    
+    # Help modal и tooltips
+    html.Div(id="help-system-container"),
 
     # Основной контент
     dbc.Row([
