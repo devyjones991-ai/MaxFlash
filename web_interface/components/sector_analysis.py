@@ -271,16 +271,14 @@ def create_sector_correlation_matrix(
         fig.update_layout(template="plotly_dark")
         return fig
 
-    try:
-        from config.market_config import get_pairs_by_sector
-
-        # Получаем по 3-5 пар из каждого сектора для анализа
-        sectors = list(sector_performance.keys())
-        sector_pairs = {}
-        
-        for sector in sectors:
-            pairs = get_pairs_by_sector(sector)
-            sector_pairs[sector] = pairs[:5] if len(pairs) >= 5 else pairs
+    # get_pairs_by_sector уже импортирован в начале файла
+    # Получаем по 3-5 пар из каждого сектора для анализа
+    sectors = list(sector_performance.keys())
+    sector_pairs = {}
+    
+    for sector in sectors:
+        pairs = get_pairs_by_sector(sector)
+        sector_pairs[sector] = pairs[:5] if len(pairs) >= 5 else pairs
 
         # Рассчитываем средние изменения цен для каждого сектора
         sector_returns = {}
