@@ -745,6 +745,9 @@ try:
         from callbacks.export_callbacks import (
             register_export_callbacks
         )
+        from callbacks.help_callbacks import (
+            register_help_callbacks
+        )
         from utils.market_data_manager import MarketDataManager
 
         data_manager = MarketDataManager()
@@ -754,6 +757,7 @@ try:
         register_symbol_autocomplete_callbacks(app, data_manager)
         register_price_alerts_callbacks(app, data_manager)
         register_export_callbacks(app, data_manager)
+        register_help_callbacks(app)
 except (ImportError, AttributeError) as e:
     # Callbacks не обязательны для базовой работы
     logger.debug("Callbacks не загружены: %s", str(e))
