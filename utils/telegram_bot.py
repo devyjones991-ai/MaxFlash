@@ -513,6 +513,11 @@ class TelegramBot:
 
         def run():
             try:
+                import asyncio
+                # Создаем новый event loop для потока
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                
                 self.application = Application.builder().token(self.token).post_init(post_init).build()
                 
                 # Регистрация обработчиков
@@ -527,9 +532,13 @@ class TelegramBot:
 
                 # Запуск бота
                 self.is_running = True
-                self.application.run_polling(allowed_updates=Update.ALL_TYPES)
+                logger.info("Telegram бот запускается...")
+                self.application.run_polling(
+                    allowed_updates=Update.ALL_TYPES,
+                    drop_pending_updates=True
+                )
             except Exception as e:
-                logger.error(f"Ошибка запуска Telegram бота: {str(e)}")
+                logger.error(f"Ошибка запуска Telegram бота: {str(e)}", exc_info=True)
                 self.is_running = False
 
         self.bot_thread = threading.Thread(target=run, daemon=True, name="TelegramBot")
