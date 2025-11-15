@@ -10,8 +10,20 @@ import dash_bootstrap_components as dbc
 
 logger = logging.getLogger(__name__)
 
+import sys
+from pathlib import Path
+
+# Добавляем путь к корню проекта
+project_root = Path(__file__).parent.parent.parent
+if str(project_root) not in sys.path:
+    sys.path.insert(0, str(project_root))
+
 from utils.market_data_manager import MarketDataManager
-from config.market_config import POPULAR_PAIRS
+
+try:
+    from config.market_config import POPULAR_PAIRS
+except ImportError:
+    POPULAR_PAIRS = ['BTC/USDT', 'ETH/USDT', 'BNB/USDT', 'SOL/USDT', 'XRP/USDT', 'ADA/USDT', 'DOGE/USDT', 'AVAX/USDT']
 
 try:
     from components.watchlist import create_watchlist_items, create_watchlist_item

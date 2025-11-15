@@ -6,7 +6,18 @@ from dash import Input, Output, State, callback_context
 from dash import html
 import dash_bootstrap_components as dbc
 
-from config.market_config import POPULAR_PAIRS
+import sys
+from pathlib import Path
+
+# Добавляем путь к корню проекта
+project_root = Path(__file__).parent.parent.parent
+if str(project_root) not in sys.path:
+    sys.path.insert(0, str(project_root))
+
+try:
+    from config.market_config import POPULAR_PAIRS
+except ImportError:
+    POPULAR_PAIRS = ['BTC/USDT', 'ETH/USDT', 'BNB/USDT', 'SOL/USDT', 'XRP/USDT', 'ADA/USDT', 'DOGE/USDT', 'AVAX/USDT']
 from utils.market_data_manager import MarketDataManager
 
 

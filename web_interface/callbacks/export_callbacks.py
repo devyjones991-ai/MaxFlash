@@ -7,7 +7,20 @@ import pandas as pd
 from typing import Dict, Any
 
 from utils.market_data_manager import MarketDataManager
-from config.market_config import POPULAR_PAIRS, get_sector_for_pair
+import sys
+from pathlib import Path
+
+# Добавляем путь к корню проекта
+project_root = Path(__file__).parent.parent.parent
+if str(project_root) not in sys.path:
+    sys.path.insert(0, str(project_root))
+
+try:
+    from config.market_config import POPULAR_PAIRS, get_sector_for_pair
+except ImportError:
+    POPULAR_PAIRS = ['BTC/USDT', 'ETH/USDT', 'BNB/USDT', 'SOL/USDT']
+    def get_sector_for_pair(pair: str):
+        return None
 
 
 def register_export_callbacks(app, data_manager=None):
