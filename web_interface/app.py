@@ -802,12 +802,12 @@ if __name__ == '__main__':
         from utils.market_data_manager import MarketDataManager
         from utils.market_alerts import MarketAlerts
 
-        data_manager = MarketDataManager()
+        data_manager = MarketDataManager(cache_ttl_minutes=3)  # Оптимизированный TTL
         alerts = MarketAlerts(data_manager)
         market_monitor = MarketMonitor(
             data_manager=data_manager,
             alerts=alerts,
-            monitoring_interval=30  # Проверка каждые 30 секунд
+            monitoring_interval=60  # Проверка каждую минуту (увеличено)
         )
         market_monitor.start()
         logger.info("Фоновый мониторинг рынка запущен")
