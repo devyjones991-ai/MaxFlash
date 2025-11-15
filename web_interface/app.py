@@ -770,6 +770,11 @@ if __name__ == '__main__':
     logger.info("Starting MaxFlash Trading System Dashboard")
     logger.info("Dashboard available at: http://localhost:8050")
 
+    # Инициализация менеджеров данных
+    data_manager = None
+    alerts = None
+    market_monitor = None
+    
     # Запускаем фоновый мониторинг рынка
     try:
         from utils.market_monitor import MarketMonitor
@@ -787,6 +792,38 @@ if __name__ == '__main__':
         logger.info("Фоновый мониторинг рынка запущен")
     except Exception as e:
         logger.warning("Не удалось запустить мониторинг рынка: %s", str(e))
+        # Создаем базовые экземпляры для Telegram бота
+        if data_manager is None:
+            try:
+                from utils.market_data_manager import MarketDataManager
+                from utils.market_alerts import MarketAlerts
+                data_manager = MarketDataManager()
+                alerts = MarketAlerts(data_manager)
+            except Exception:
+                pass
+
+    # Запускаем Telegram бота
+    try:
+        from utils.telegram_bot import get_telegram_bot
+        
+        telegram_token = "8274253718:AAGa8juUeXf1jXP7BUZ3o_t-fpK-3BADxew"
+        telegram_bot = get_telegram_bot(
+            token=telegram_token,
+            data_manager=data_manager,
+            alerts=alerts
+        )
+        
+        if telegram_bot:
+            telegram_bot.start()
+            logger.info("Telegram бот запущен: t.me/MaxFlash_bot")
+            
+            # Интегрируем бота с монитором для отправки уведомлений
+            if market_monitor:
+                market_monitor.telegram_bot = telegram_bot
+        else:
+            logger.warning("Не удалось создать Telegram бота")
+    except Exception as e:
+        logger.warning("Не удалось запустить Telegram бота: %s", str(e))
 
     # Запускаем WebSocket для real-time обновлений
     try:

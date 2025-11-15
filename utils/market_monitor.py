@@ -55,6 +55,7 @@ class MarketMonitor:
         self.price_history: Dict[str, List[float]] = {}
         self.volume_history: Dict[str, List[float]] = {}
         self.last_check_time: Dict[str, datetime] = {}
+        self.telegram_bot = None  # Будет установлен из app.py
         
         # WebSocket для real-time обновлений
         self.use_websocket = use_websocket and HAS_WEBSOCKET
@@ -145,7 +146,11 @@ class MarketMonitor:
             # Проверяем изменение цены
             if symbol in self.price_history and self.price_history[symbol]:
                 previous_price = self.price_history[symbol][-1]
-                self.alerts.check_price_spike(symbol, current_price, previous_price)
+                spike_detected = self.alerts.check_price_spike(symbol, current_price, previous_price)
+                # Отправляем уведомление в Telegram если есть бот
+                if spike_detected and self.telegram_bot:
+                    change_pct = ((current_price - previous_price) / previous_price * 100) if previous_price > 0 else 0
+                    self.telegram_bot.send_price_alert(symbol, current_price, change_pct, "spike")
 
             # Обновляем историю цен
             if symbol not in self.price_history:
@@ -208,7 +213,11 @@ class MarketMonitor:
                 # Проверяем изменение цены
                 if symbol in self.price_history:
                     previous_price = self.price_history[symbol][-1] if self.price_history[symbol] else current_price
-                    self.alerts.check_price_spike(symbol, current_price, previous_price)
+                    spike_detected = self.alerts.check_price_spike(symbol, current_price, previous_price)
+                    # Отправляем уведомление в Telegram если есть бот
+                    if spike_detected and self.telegram_bot:
+                        change_pct = ((current_price - previous_price) / previous_price * 100) if previous_price > 0 else 0
+                        self.telegram_bot.send_price_alert(symbol, current_price, change_pct, "spike")
                 else:
                     self.price_history[symbol] = []
 

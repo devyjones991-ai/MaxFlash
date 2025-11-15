@@ -100,7 +100,7 @@ class MarketAlerts:
             except Exception as e:
                 logger.error("Alert callback error: %s", str(e))
 
-    def check_price_spike(self, symbol: str, current_price: float, previous_price: float):
+    def check_price_spike(self, symbol: str, current_price: float, previous_price: float) -> bool:
         """
         Проверить резкое изменение цены.
 
@@ -108,9 +108,12 @@ class MarketAlerts:
             symbol: Торговая пара
             current_price: Текущая цена
             previous_price: Предыдущая цена
+
+        Returns:
+            True если обнаружен spike, False иначе
         """
         if previous_price == 0:
-            return
+            return False
 
         change_percent = abs((current_price - previous_price) / previous_price) * 100
         
@@ -125,6 +128,9 @@ class MarketAlerts:
                 severity=severity
             )
             self._trigger_alert(alert)
+            return True
+        
+        return False
 
     def check_volume_surge(self, symbol: str, current_volume: float, avg_volume: float):
         """
