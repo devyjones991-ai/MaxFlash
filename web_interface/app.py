@@ -533,11 +533,12 @@ def update_dashboard(
             from components.volume_profile_viz import (
                 create_volume_profile_chart,
             )
-            # Используем данные для volume profile
+            # Используем данные для volume profile (оптимизация - только последние 100 свечей)
             if dataframe is not None and not dataframe.empty:
-                # Извлекаем данные из dataframe для volume profile
-                price_levels = dataframe['close'].values
-                volumes = dataframe['volume'].values
+                # Используем только последние 100 свечей для скорости
+                volume_df = dataframe.tail(100) if len(dataframe) > 100 else dataframe
+                price_levels = volume_df['close'].values
+                volumes = volume_df['volume'].values
                 volume_fig = create_volume_profile_chart(
                     price_levels=price_levels,
                     volumes=volumes
