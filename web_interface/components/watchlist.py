@@ -202,7 +202,8 @@ def create_watchlist_items(
         ])
 
     items = []
-    tickers = data_manager.get_tickers('binance', symbols, max_workers=10)
+    # Ограничиваем количество воркеров для производительности
+    tickers = data_manager.get_tickers('binance', symbols, max_workers=5)
 
     for symbol in symbols:
         ticker = tickers.get(symbol)

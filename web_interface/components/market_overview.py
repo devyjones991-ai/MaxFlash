@@ -151,7 +151,7 @@ def create_market_overview(
                         ),
                         dcc.Interval(
                             id='heatmap-interval',
-                            interval=60*1000,  # Обновление каждую минуту
+                            interval=120*1000,  # Обновление каждые 2 минуты (увеличено)
                             n_intervals=0
                         )
                     ])

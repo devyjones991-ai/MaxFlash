@@ -137,8 +137,8 @@ class MarketDataManager:
 
     def batch_fetch_ohlcv(
         self, symbols: List[str], timeframe: str = '15m',
-        limit: int = 200, exchange_id: str = 'binance',
-        max_workers: int = 10
+        limit: int = 150, exchange_id: str = 'binance',  # Уменьшен лимит
+        max_workers: int = 5  # Уменьшено для производительности
     ) -> Dict[str, Optional[pd.DataFrame]]:
         """
         Batch загрузка OHLCV данных для множества пар с параллельной обработкой.
@@ -239,7 +239,7 @@ class MarketDataManager:
     def get_tickers(
         self, exchange_id: str = 'binance',
         symbols: Optional[List[str]] = None,
-        max_workers: int = 10
+        max_workers: int = 5  # Уменьшено по умолчанию для производительности
     ) -> Dict[str, Dict[str, Any]]:
         """
         Получить тикеры для множества пар с параллельной загрузкой.

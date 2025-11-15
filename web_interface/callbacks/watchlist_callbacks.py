@@ -133,6 +133,9 @@ def register_watchlist_callbacks(app, data_manager=None):
                 dbc.Alert("Нет отслеживаемых монет. Добавьте монету выше.", color="info")
             ])
 
+        # Ограничиваем количество одновременно загружаемых тикеров
+        if len(symbols) > 20:
+            symbols = symbols[:20]  # Максимум 20 монет для производительности
         return create_watchlist_items(symbols, data_manager)
 
     @app.callback(
@@ -208,13 +211,14 @@ def register_watchlist_callbacks(app, data_manager=None):
             return html.Div(), {"display": "none"}
 
         query_upper = query.upper()
-        pairs = pairs_data.get('pairs', []) if pairs_data else POPULAR_PAIRS[:200]
+        # Используем только популярные пары для быстрого поиска
+        pairs = pairs_data.get('pairs', []) if pairs_data else POPULAR_PAIRS[:100]
         
-        # Ищем совпадения
+        # Ищем совпадения (оптимизированный поиск)
         suggestions = [
             pair for pair in pairs
             if query_upper in pair.upper()
-        ][:15]  # Показываем максимум 15
+        ][:10]  # Показываем максимум 10 (уменьшено)
 
         if not suggestions:
             return html.Div([

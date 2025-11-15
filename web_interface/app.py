@@ -309,8 +309,9 @@ app.layout = dbc.Container([
                     ),
                     dcc.Interval(
                         id='interval-component',
-                        interval=15*1000,  # 15 секунд
-                        n_intervals=0
+                        interval=30*1000,  # 30 секунд (увеличено для производительности)
+                        n_intervals=0,
+                        disabled=False
                     )
                 ], className="p-2")
             ], className="mb-2")
@@ -379,8 +380,9 @@ app.layout = dbc.Container([
                     html.Div(id="watchlist-items", className="mt-3"),
                     dcc.Interval(
                         id='watchlist-interval',
-                        interval=5*1000,  # Обновление каждые 5 секунд
-                        n_intervals=0
+                        interval=15*1000,  # Обновление каждые 15 секунд (увеличено)
+                        n_intervals=0,
+                        disabled=False
                     ),
                     # Модальное окно для выбора всех пар
                     dbc.Modal([
@@ -445,8 +447,9 @@ app.layout = dbc.Container([
                     dcc.Store(id='alerts-store', data={'alerts': []}),
                     dcc.Interval(
                         id='alerts-check-interval',
-                        interval=3*1000,  # Проверка каждые 3 секунды
-                        n_intervals=0
+                        interval=10*1000,  # Проверка каждые 10 секунд (увеличено)
+                        n_intervals=0,
+                        disabled=False
                     )
                 ])
             ], className="mb-3"),
@@ -503,9 +506,12 @@ def update_dashboard(
             # Используем новый MarketDataManager если доступен
             try:
                 from utils.market_data_manager import MarketDataManager
-                data_manager = MarketDataManager()
+                # Используем глобальный экземпляр для кэширования
+                if not hasattr(app, '_data_manager'):
+                    app._data_manager = MarketDataManager(cache_ttl_minutes=3)
+                data_manager = app._data_manager
                 dataframe = data_manager.get_ohlcv(
-                    symbol, timeframe='15m', limit=200,
+                    symbol, timeframe='15m', limit=150,  # Уменьшен лимит
                     exchange_id='binance'
                 )
             except ImportError:

@@ -47,7 +47,7 @@ def register_market_overview_callbacks(app, data_manager=None):
         data_manager: Менеджер данных рынка
     """
     if data_manager is None:
-        data_manager = MarketDataManager()
+        data_manager = MarketDataManager(cache_ttl_minutes=2)  # Более короткий TTL для market overview
 
     async_loader = AsyncDataLoader(data_manager)
 
@@ -190,7 +190,7 @@ def register_market_overview_callbacks(app, data_manager=None):
             else:
                 # Используем асинхронную загрузку для производительности
                 tickers = async_loader.load_tickers_async(
-                    POPULAR_PAIRS[:100], 'binance', max_workers=10
+                    POPULAR_PAIRS[:50], 'binance', max_workers=5  # Уменьшено для скорости
                 )
                 # Фильтруем None значения
                 tickers = {k: v for k, v in tickers.items() if v is not None}
