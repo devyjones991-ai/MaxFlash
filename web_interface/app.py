@@ -287,7 +287,7 @@ app.layout = dbc.Container([
         dbc.Col([
             # Volume Profile
             dbc.Card([
-                dbc.CardHeader("Volume Profile"),
+                dbc.CardHeader("Профиль Объема"),
                 dbc.CardBody([
                     dcc.Graph(id="volume-profile",
                               style={"height": "250px"})
@@ -296,7 +296,7 @@ app.layout = dbc.Container([
 
             # Active Signals
             dbc.Card([
-                dbc.CardHeader("🎯 Active Signals"),
+                dbc.CardHeader("🎯 Активные Сигналы"),
                 dbc.CardBody([
                     html.Div(id="signals-panel")
                 ])
