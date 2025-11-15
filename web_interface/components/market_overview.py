@@ -10,12 +10,28 @@ from typing import Dict, List, Optional, Any
 from dash import html, dcc
 import dash_bootstrap_components as dbc
 
+import sys
+from pathlib import Path
+
+# Добавляем путь к корню проекта для импорта config
+project_root = Path(__file__).parent.parent.parent
+if str(project_root) not in sys.path:
+    sys.path.insert(0, str(project_root))
+
 from utils.market_data_manager import MarketDataManager
 from utils.market_analytics import MarketAnalytics
 from utils.market_alerts import MarketAlerts
-from config.market_config import (
-    POPULAR_PAIRS, MARKET_OVERVIEW_CONFIG, get_sector_for_pair
-)
+
+try:
+    from config.market_config import (
+        POPULAR_PAIRS, MARKET_OVERVIEW_CONFIG, get_sector_for_pair
+    )
+except ImportError:
+    # Fallback значения если config не найден
+    POPULAR_PAIRS = ['BTC/USDT', 'ETH/USDT', 'BNB/USDT', 'SOL/USDT']
+    MARKET_OVERVIEW_CONFIG = {'top_pairs_count': 100, 'heatmap_resolution': '1h', 'update_interval_seconds': 60}
+    def get_sector_for_pair(pair: str):
+        return None
 
 
 def create_market_overview(

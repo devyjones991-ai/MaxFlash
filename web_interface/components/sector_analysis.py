@@ -10,11 +10,32 @@ from typing import Dict, List, Optional, Any
 from dash import html, dcc
 import dash_bootstrap_components as dbc
 
+import sys
+from pathlib import Path
+
+# Добавляем путь к корню проекта для импорта config
+project_root = Path(__file__).parent.parent.parent
+if str(project_root) not in sys.path:
+    sys.path.insert(0, str(project_root))
+
 from utils.market_data_manager import MarketDataManager
 from utils.market_analytics import MarketAnalytics
-from config.market_config import (
-    get_all_sectors, get_pairs_by_sector, SECTOR_CLASSIFICATION
-)
+
+try:
+    from config.market_config import (
+        get_all_sectors, get_pairs_by_sector, SECTOR_CLASSIFICATION
+    )
+except ImportError:
+    # Fallback значения если config не найден
+    SECTOR_CLASSIFICATION = {
+        'Layer 1': ['BTC/USDT', 'ETH/USDT', 'BNB/USDT', 'SOL/USDT'],
+        'DeFi': ['UNI/USDT', 'AAVE/USDT', 'COMP/USDT'],
+        'Meme Coins': ['DOGE/USDT', 'SHIB/USDT', 'PEPE/USDT']
+    }
+    def get_all_sectors():
+        return list(SECTOR_CLASSIFICATION.keys())
+    def get_pairs_by_sector(sector: str):
+        return SECTOR_CLASSIFICATION.get(sector, [])
 
 
 def create_sector_analysis(
