@@ -183,13 +183,42 @@ app.layout = dbc.Container([
                 ], width="auto", className="ms-auto d-flex align-items-center")
             ], align="center")
         ], fluid=True)
-    ], color="dark", dark=True, className="mb-4"),
+    ], color="dark", dark=True, className="mb-2"),
 
-    # Status bar
+    # Status bar (компактный)
     dbc.Row([
         dbc.Col([
             dbc.Alert(id="status-alert", color="info",
-                      className="mb-3", dismissable=True)
+                      className="mb-2 py-2", dismissable=True)
+        ])
+    ]),
+    
+    # Навигационные вкладки (вверху, компактные)
+    dbc.Row([
+        dbc.Col([
+            dbc.Card([
+                dbc.CardBody([
+                    dbc.Tabs([
+                        dbc.Tab(label="📊 Footprint", tab_id="footprint",
+                                activeTabClassName="fw-bold text-primary"),
+                        dbc.Tab(label="📈 Профиль", tab_id="market-profile",
+                                activeTabClassName="fw-bold text-primary"),
+                        dbc.Tab(label="🔗 Конфлюенция", tab_id="confluence",
+                                activeTabClassName="fw-bold text-primary"),
+                        dbc.Tab(label="📉 Бэктест", tab_id="backtest",
+                                activeTabClassName="fw-bold text-primary"),
+                        dbc.Tab(label="⚡ Сигналы", tab_id="signals",
+                                activeTabClassName="fw-bold text-primary"),
+                        dbc.Tab(label="🌐 Обзор", tab_id="market-overview",
+                                activeTabClassName="fw-bold text-primary"),
+                        dbc.Tab(label="📊 Мульти", tab_id="multi-view",
+                                activeTabClassName="fw-bold text-primary"),
+                        dbc.Tab(label="🏢 Сектора", tab_id="sector-analysis",
+                                activeTabClassName="fw-bold text-primary"),
+                    ], id="tabs", active_tab="footprint", className="mb-2"),
+                    html.Div(id="tab-content", className="mt-2")
+                ], className="p-2")
+            ], className="mb-2")
         ])
     ]),
     
@@ -235,7 +264,7 @@ app.layout = dbc.Container([
                                         direction="down"
                                     ),
                                     dbc.Button(
-                                        "Load", id="load-symbol-btn",
+                                        "Загрузить", id="load-symbol-btn",
                                         color="primary", size="sm"
                                     )
                                 ], size="sm"),
@@ -269,7 +298,7 @@ app.layout = dbc.Container([
                 dbc.CardBody([
                     dcc.Graph(
                         id="price-chart",
-                        style={"height": "600px"},
+                        style={"height": "500px"},
                         config={
                             "displayModeBar": True,
                             "displaylogo": False,
@@ -283,33 +312,33 @@ app.layout = dbc.Container([
                         interval=15*1000,  # 15 секунд
                         n_intervals=0
                     )
-                ])
-            ], className="mb-4")
+                ], className="p-2")
+            ], className="mb-2")
         ], width=9),
 
         # Боковая панель (правая колонка - 3 из 12)
         dbc.Col([
             # Volume Profile
             dbc.Card([
-                dbc.CardHeader("Профиль Объема"),
+                dbc.CardHeader("Профиль Объема", className="py-2"),
                 dbc.CardBody([
                     dcc.Graph(id="volume-profile",
-                              style={"height": "250px"})
-                ])
-            ], className="mb-3"),
+                              style={"height": "200px"})
+                ], className="p-2")
+            ], className="mb-2"),
 
             # Active Signals
             dbc.Card([
-                dbc.CardHeader("🎯 Активные Сигналы"),
+                dbc.CardHeader("🎯 Активные Сигналы", className="py-2"),
                 dbc.CardBody([
                     html.Div(id="signals-panel")
-                ])
-            ], className="mb-3"),
+                ], className="p-2")
+            ], className="mb-2"),
 
             # Watchlist - Отслеживание монет
             dbc.Card([
                 dbc.CardHeader([
-                    html.H5("⭐ Отслеживание", className="mb-0"),
+                    html.H6("⭐ Отслеживание", className="mb-0"),
                     html.Div([
                         dbc.InputGroup([
                             dbc.Input(
@@ -380,7 +409,7 @@ app.layout = dbc.Container([
 
             # Price Alerts - Уведомления о ценах
             dbc.Card([
-                dbc.CardHeader("🔔 Уведомления"),
+                dbc.CardHeader("🔔 Уведомления", className="py-2"),
                 dbc.CardBody([
                     dbc.InputGroup([
                         dbc.Input(
@@ -424,51 +453,15 @@ app.layout = dbc.Container([
 
             # Quick Metrics
             dbc.Card([
-                dbc.CardHeader("📈 Быстрые Метрики"),
+                dbc.CardHeader("📈 Быстрые Метрики", className="py-2"),
                 dbc.CardBody([
                     html.Div(id="metrics-panel")
-                ])
+                ], className="p-2")
             ])
         ], width=3)
     ]),
 
-    # Tabs для дополнительных виджетов
-    dbc.Row([
-        dbc.Col([
-            dbc.Card([
-                dbc.CardBody([
-                    dbc.Tabs([
-                        dbc.Tab(label="📊 Footprint Chart",
-                                tab_id="footprint",
-                                activeTabClassName="fw-bold"),
-                        dbc.Tab(label="📈 Профиль Рынка",
-                                tab_id="market-profile",
-                                activeTabClassName="fw-bold"),
-                        dbc.Tab(label="🔗 Зоны Конфлюенции",
-                                tab_id="confluence",
-                                activeTabClassName="fw-bold"),
-                        dbc.Tab(label="📉 Результаты Бэктеста",
-                                tab_id="backtest",
-                                activeTabClassName="fw-bold"),
-                        dbc.Tab(label="⚡ Сигналы в Реальном Времени",
-                                tab_id="signals",
-                                activeTabClassName="fw-bold"),
-                        dbc.Tab(label="🌐 Обзор Рынка",
-                                tab_id="market-overview",
-                                activeTabClassName="fw-bold"),
-                        dbc.Tab(label="📊 Мульти-Вид",
-                                tab_id="multi-view",
-                                activeTabClassName="fw-bold"),
-                        dbc.Tab(label="🏢 Анализ Секторов",
-                                tab_id="sector-analysis",
-                                activeTabClassName="fw-bold"),
-                    ], id="tabs", active_tab="footprint"),
-                    html.Div(id="tab-content", className="mt-3")
-                ])
-            ], className="mt-4")
-        ])
-    ])
-], fluid=True, className="p-4")
+], fluid=True, className="p-2")
 
 
 # Callback для обновления всех компонентов
@@ -631,7 +624,7 @@ def update_tab_content(active_tab):
                 return html.Div([
                     dcc.Graph(
                         figure=create_market_profile_chart(),
-                        style={"height": "400px"}
+                        style={"height": "350px"}
                     )
                 ])
             except ImportError:
@@ -644,7 +637,7 @@ def update_tab_content(active_tab):
                 return html.Div([
                     dcc.Graph(
                         figure=create_confluence_map(),
-                        style={"height": "400px"}
+                        style={"height": "350px"}
                     )
                 ])
             except ImportError:

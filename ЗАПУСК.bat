@@ -20,7 +20,7 @@ echo ✅ Python найден
 echo.
 echo 📦 Установка зависимостей (если нужно)...
 python -m pip install --quiet --upgrade pip >nul 2>&1
-python -m pip install --quiet dash dash-bootstrap-components plotly pandas numpy ccxt python-telegram-bot >nul 2>&1
+python -m pip install --quiet dash dash-bootstrap-components plotly pandas numpy ccxt python-telegram-bot websocket-client >nul 2>&1
 
 echo.
 echo 🚀 Запуск системы...
