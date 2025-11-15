@@ -172,10 +172,11 @@ def run_dashboard(web_interface_path):
     print_status("Запуск Dashboard...", "info")
     print()
     print("=" * 60)
-    print("  MAXFLASH TRADING SYSTEM DASHBOARD")
+    print("  MAXFLASH - ТОРГОВАЯ СИСТЕМА")
     print("=" * 60)
     print()
-    print(f"  🌐 Dashboard: {url}")
+    print(f"  🌐 Интерфейс: {url}")
+    print(f"  🤖 Telegram бот: t.me/MaxFlash_bot")
     print("  ⏹️  Нажмите Ctrl+C для остановки")
     print("=" * 60)
     print()
@@ -229,7 +230,7 @@ def main():
     """Главная функция."""
     try:
         print()
-        print_status("MaxFlash Trading System - Production Launch", "info")
+        print_status("MaxFlash - Торговая Система - Запуск", "info")
         print()
 
         # Проверки

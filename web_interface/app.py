@@ -150,7 +150,7 @@ app = dash.Dash(
     ]
 )
 
-app.title = "MaxFlash Trading System Dashboard"
+app.title = "MaxFlash - Торговая Система"
 
 # Инициализация Freqtrade клиента (если доступен)
 ft_client = None
@@ -165,7 +165,7 @@ app.layout = dbc.Container([
         dbc.Container([
             dbc.Row([
                 dbc.Col([
-                    html.H3("📊 MaxFlash Trading System",
+                    html.H3("📊 MaxFlash - Торговая Система",
                             className="mb-0"),
                     html.Small(
                         "Smart Money + Footprint + Volume Profile + "
@@ -174,9 +174,9 @@ app.layout = dbc.Container([
                 ], width="auto"),
                 dbc.Col([
                     dbc.ButtonGroup([
-                        dbc.Button("🔄 Refresh", id="refresh-btn",
+                        dbc.Button("🔄 Обновить", id="refresh-btn",
                                    outline=True, color="primary"),
-                        dbc.Button("⚙️ Settings", id="settings-btn",
+                        dbc.Button("⚙️ Настройки", id="settings-btn",
                                    outline=True, color="secondary"),
                     ])
                 ], width="auto", className="ms-auto")
@@ -200,7 +200,7 @@ app.layout = dbc.Container([
                 dbc.CardHeader([
                     dbc.Row([
                         dbc.Col([
-                            html.H5("Price Chart with Order Blocks & FVG",
+                            html.H5("График цены с Order Blocks & FVG",
                                     className="mb-0")
                         ], width="auto"),
                         dbc.Col([
@@ -420,7 +420,7 @@ app.layout = dbc.Container([
 
             # Quick Metrics
             dbc.Card([
-                dbc.CardHeader("📈 Quick Metrics"),
+                dbc.CardHeader("📈 Быстрые Метрики"),
                 dbc.CardBody([
                     html.Div(id="metrics-panel")
                 ])
@@ -437,25 +437,25 @@ app.layout = dbc.Container([
                         dbc.Tab(label="📊 Footprint Chart",
                                 tab_id="footprint",
                                 activeTabClassName="fw-bold"),
-                        dbc.Tab(label="📈 Market Profile",
+                        dbc.Tab(label="📈 Профиль Рынка",
                                 tab_id="market-profile",
                                 activeTabClassName="fw-bold"),
-                        dbc.Tab(label="🔗 Confluence Zones",
+                        dbc.Tab(label="🔗 Зоны Конфлюенции",
                                 tab_id="confluence",
                                 activeTabClassName="fw-bold"),
-                        dbc.Tab(label="📉 Backtest Results",
+                        dbc.Tab(label="📉 Результаты Бэктеста",
                                 tab_id="backtest",
                                 activeTabClassName="fw-bold"),
-                        dbc.Tab(label="⚡ Real-time Signals",
+                        dbc.Tab(label="⚡ Сигналы в Реальном Времени",
                                 tab_id="signals",
                                 activeTabClassName="fw-bold"),
-                        dbc.Tab(label="🌐 Market Overview",
+                        dbc.Tab(label="🌐 Обзор Рынка",
                                 tab_id="market-overview",
                                 activeTabClassName="fw-bold"),
-                        dbc.Tab(label="📊 Multi-View",
+                        dbc.Tab(label="📊 Мульти-Вид",
                                 tab_id="multi-view",
                                 activeTabClassName="fw-bold"),
-                        dbc.Tab(label="🏢 Sector Analysis",
+                        dbc.Tab(label="🏢 Анализ Секторов",
                                 tab_id="sector-analysis",
                                 activeTabClassName="fw-bold"),
                     ], id="tabs", active_tab="footprint"),
@@ -577,8 +577,8 @@ def update_dashboard(
 
         # Status
         status_msg = (
-            f"✅ System Online | Symbol: {symbol} | "
-            f"Last update: {datetime.now().strftime('%H:%M:%S')}"
+            f"✅ Система онлайн | Пара: {symbol} | "
+            f"Последнее обновление: {datetime.now().strftime('%H:%M:%S')}"
         )
         status_color = "success"
 
@@ -767,8 +767,8 @@ if __name__ == '__main__':
             logger.warning("Не удалось открыть браузер: %s", str(e))
             print(f"\nОткройте вручную: {url}\n")
 
-    logger.info("Starting MaxFlash Trading System Dashboard")
-    logger.info("Dashboard available at: http://localhost:8050")
+    logger.info("Запуск MaxFlash Trading System Dashboard")
+    logger.info("Интерфейс доступен по адресу: http://localhost:8050")
 
     # Инициализация менеджеров данных
     data_manager = None
