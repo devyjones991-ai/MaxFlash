@@ -609,7 +609,7 @@ def update_tab_content(active_tab):
                 return html.Div([
                     dcc.Graph(
                         figure=create_footprint_chart(),
-                        style={"height": "400px"}
+                        style={"height": "350px"}
                     )
                 ])
             except ImportError:
