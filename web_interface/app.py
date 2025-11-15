@@ -676,7 +676,10 @@ def update_tab_content(active_tab):
                 from utils.market_analytics import MarketAnalytics
                 from utils.market_alerts import MarketAlerts
 
-                data_manager = MarketDataManager()
+                # Используем глобальный экземпляр если есть
+                if not hasattr(app, '_data_manager'):
+                    app._data_manager = MarketDataManager(cache_ttl_minutes=2)
+                data_manager = app._data_manager
                 analytics = MarketAnalytics(data_manager)
                 alerts = MarketAlerts(data_manager)
                 return create_market_overview(data_manager, analytics, alerts)
@@ -689,7 +692,10 @@ def update_tab_content(active_tab):
                 from components.multi_chart_view import create_multi_chart_view
                 from utils.market_data_manager import MarketDataManager
 
-                data_manager = MarketDataManager()
+                # Используем глобальный экземпляр если есть
+                if not hasattr(app, '_data_manager'):
+                    app._data_manager = MarketDataManager(cache_ttl_minutes=3)
+                data_manager = app._data_manager
                 return create_multi_chart_view(data_manager)
             except ImportError as e:
                 msg = f"Multi-View компонент не найден: {str(e)}"
@@ -701,7 +707,10 @@ def update_tab_content(active_tab):
                 from utils.market_data_manager import MarketDataManager
                 from utils.market_analytics import MarketAnalytics
 
-                data_manager = MarketDataManager()
+                # Используем глобальный экземпляр если есть
+                if not hasattr(app, '_data_manager'):
+                    app._data_manager = MarketDataManager(cache_ttl_minutes=2)
+                data_manager = app._data_manager
                 analytics = MarketAnalytics(data_manager)
                 return create_sector_analysis(data_manager, analytics)
             except ImportError as e:
@@ -750,7 +759,11 @@ try:
         )
         from utils.market_data_manager import MarketDataManager
 
-        data_manager = MarketDataManager()
+        # Создаем глобальный экземпляр для переиспользования
+        if not hasattr(app, '_data_manager'):
+            app._data_manager = MarketDataManager(cache_ttl_minutes=3)
+        data_manager = app._data_manager
+        
         register_multi_view_callbacks(app, data_manager)
         register_market_overview_callbacks(app, data_manager)
         register_watchlist_callbacks(app, data_manager)
