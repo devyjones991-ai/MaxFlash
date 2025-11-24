@@ -93,7 +93,8 @@ async def get_signals(symbol: Optional[str] = None, timeframe: str = "15m", limi
     """
     try:
         from utils.async_exchange import get_async_exchange
-        from ml.lstm_signal_generator import LSTMSignalGenerator
+        from ml.ensemble_model import EnsembleSignalGenerator
+        from ml.sentiment_analyzer import SentimentAnalyzer
         from indicators.smart_money.order_blocks import OrderBlockDetector
         from indicators.footprint.delta import DeltaAnalyzer
         from utils.confluence import ConfluenceCalculator
@@ -114,7 +115,8 @@ async def get_signals(symbol: Optional[str] = None, timeframe: str = "15m", limi
         signals = []
 
         # Initialize analyzers
-        ml_generator = LSTMSignalGenerator(lookback_periods=60)
+        ensemble_model = EnsembleSignalGenerator()
+        sentiment_analyzer = SentimentAnalyzer()
         ob_detector = OrderBlockDetector()
         delta_analyzer = DeltaAnalyzer()
 
@@ -146,22 +148,49 @@ async def get_signals(symbol: Optional[str] = None, timeframe: str = "15m", limi
                     "delta": float(df.get("delta", pd.Series([0])).iloc[-1]),
                 }
 
-                # Generate ML signal
-                signal = ml_generator.generate_signal(df, indicators)
+                # 1. Get Ensemble Prediction
+                # Note: In a real scenario, we'd load a pre-trained model.
+                # For now, we might get "unreliable" warnings if not trained,
+                # but the structure is correct.
+                prediction = ensemble_model.predict(df)
+
+                # 2. Get Sentiment
+                sentiment = await sentiment_analyzer.get_sentiment_for_symbol(sym)
+
+                # 3. Combine Confidence
+                # Base confidence from Ensemble
+                base_conf = prediction["confidence"]
+
+                # Adjust with Sentiment (boost if aligned)
+                sentiment_boost = 0.0
+                if prediction["action"] == "BUY" and sentiment["label"] == "POSITIVE":
+                    sentiment_boost = 0.1
+                elif prediction["action"] == "SELL" and sentiment["label"] == "NEGATIVE":
+                    sentiment_boost = 0.1
+
+                final_confidence = min(0.99, base_conf + sentiment_boost)
 
                 # Only include BUY/SELL signals
-                if signal["action"] != "HOLD" and signal["combined_confidence"] > 0.55:
+                if prediction["action"] != "HOLD" and final_confidence > 0.50:
                     signals.append(
                         SignalModel(
                             symbol=sym,
-                            type=signal["action"],
-                            entry_price=signal["entry_price"],
-                            stop_loss=signal["stop_loss"],
-                            take_profit=signal["take_profit"],
-                            confluence=int(signal["combined_confidence"] * 10),  # Scale to 0-10
+                            type=prediction["action"],
+                            entry_price=float(df["close"].iloc[-1]),
+                            stop_loss=float(
+                                df["close"].iloc[-1] * 0.98
+                                if prediction["action"] == "BUY"
+                                else df["close"].iloc[-1] * 1.02
+                            ),  # Simple fallback SL
+                            take_profit=float(
+                                df["close"].iloc[-1] * 1.04
+                                if prediction["action"] == "BUY"
+                                else df["close"].iloc[-1] * 0.96
+                            ),  # Simple fallback TP
+                            confluence=int(final_confidence * 10),
                             timeframe=timeframe,
-                            indicators=signal["indicators_used"][:5],  # Top 5
-                            confidence=signal["combined_confidence"],
+                            indicators=indicators.keys(),  # Simplified list
+                            confidence=final_confidence,
                         )
                     )
 

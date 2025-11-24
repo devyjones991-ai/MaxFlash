@@ -32,14 +32,26 @@ async def verify_components():
     # 2. Verify ML Components
     try:
         from ml.lstm_signal_generator import LSTMSignalGenerator
+        from ml.ensemble_model import EnsembleSignalGenerator
+        from ml.sentiment_analyzer import SentimentAnalyzer
         from ml.feature_engineering import create_all_features
 
         logger.info("✅ ML components imported")
         try:
+            # Verify LSTM
             generator = LSTMSignalGenerator()
             logger.info("✅ LSTMSignalGenerator instantiated")
+
+            # Verify Ensemble
+            ensemble = EnsembleSignalGenerator()
+            logger.info("✅ EnsembleSignalGenerator instantiated")
+
+            # Verify Sentiment
+            sentiment = SentimentAnalyzer()
+            logger.info("✅ SentimentAnalyzer instantiated")
+
         except ImportError as e:
-            if "TensorFlow" in str(e):
+            if "TensorFlow" in str(e) or "scikit-learn" in str(e):
                 logger.warning(f"⚠️ ML dependencies missing: {e}")
                 logger.warning("ML features will be disabled until dependencies are installed.")
             else:
