@@ -95,6 +95,7 @@ async def get_signals(symbol: Optional[str] = None, timeframe: str = "15m", limi
         from utils.async_exchange import get_async_exchange
         from ml.ensemble_model import EnsembleSignalGenerator
         from ml.sentiment_analyzer import SentimentAnalyzer
+        from ml.whale_detector import WhaleDetector
         from indicators.smart_money.order_blocks import OrderBlockDetector
         from indicators.footprint.delta import DeltaAnalyzer
         from utils.confluence import ConfluenceCalculator
@@ -117,6 +118,7 @@ async def get_signals(symbol: Optional[str] = None, timeframe: str = "15m", limi
         # Initialize analyzers
         ensemble_model = EnsembleSignalGenerator()
         sentiment_analyzer = SentimentAnalyzer()
+        whale_detector = WhaleDetector(large_trade_threshold=100000.0)  # $100k threshold
         ob_detector = OrderBlockDetector()
         delta_analyzer = DeltaAnalyzer()
 
@@ -134,6 +136,12 @@ async def get_signals(symbol: Optional[str] = None, timeframe: str = "15m", limi
                 df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms")
                 df.set_index("timestamp", inplace=True)
 
+                # Fetch recent trades for Whale Analysis
+                # Note: fetch_trades might be heavy if called for many symbols.
+                # In production, this should be cached or streamed via WS.
+                trades = await exchange.fetch_trades(sym, limit=500)
+                whale_metrics = whale_detector.detect_whales(trades)
+
                 # Calculate technical indicators
                 df = ob_detector.detect_order_blocks(df)
                 df = delta_analyzer.calculate_delta(df)
@@ -146,6 +154,8 @@ async def get_signals(symbol: Optional[str] = None, timeframe: str = "15m", limi
                     "atr": float(atr) if pd.notna(atr) else df["close"].iloc[-1] * 0.02,
                     "in_order_block": bool(df["ob_bullish_low"].iloc[-1] or df["ob_bearish_high"].iloc[-1]),
                     "delta": float(df.get("delta", pd.Series([0])).iloc[-1]),
+                    "whale_pressure": whale_metrics["pressure"],
+                    "whale_dominance": whale_metrics["dominance"],
                 }
 
                 # 1. Get Ensemble Prediction
@@ -164,11 +174,18 @@ async def get_signals(symbol: Optional[str] = None, timeframe: str = "15m", limi
                 # Adjust with Sentiment (boost if aligned)
                 sentiment_boost = 0.0
                 if prediction["action"] == "BUY" and sentiment["label"] == "POSITIVE":
-                    sentiment_boost = 0.1
+                    sentiment_boost += 0.05
                 elif prediction["action"] == "SELL" and sentiment["label"] == "NEGATIVE":
-                    sentiment_boost = 0.1
+                    sentiment_boost += 0.05
 
-                final_confidence = min(0.99, base_conf + sentiment_boost)
+                # Adjust with Whale Pressure
+                whale_boost = 0.0
+                if prediction["action"] == "BUY" and whale_metrics["pressure"] > 0.3:
+                    whale_boost += 0.1
+                elif prediction["action"] == "SELL" and whale_metrics["pressure"] < -0.3:
+                    whale_boost += 0.1
+
+                final_confidence = min(0.99, base_conf + sentiment_boost + whale_boost)
 
                 # Only include BUY/SELL signals
                 if prediction["action"] != "HOLD" and final_confidence > 0.50:
@@ -189,7 +206,7 @@ async def get_signals(symbol: Optional[str] = None, timeframe: str = "15m", limi
                             ),  # Simple fallback TP
                             confluence=int(final_confidence * 10),
                             timeframe=timeframe,
-                            indicators=indicators.keys(),  # Simplified list
+                            indicators=list(indicators.keys()),  # Simplified list
                             confidence=final_confidence,
                         )
                     )

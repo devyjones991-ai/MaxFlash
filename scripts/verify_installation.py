@@ -34,6 +34,7 @@ async def verify_components():
         from ml.lstm_signal_generator import LSTMSignalGenerator
         from ml.ensemble_model import EnsembleSignalGenerator
         from ml.sentiment_analyzer import SentimentAnalyzer
+        from ml.whale_detector import WhaleDetector
         from ml.feature_engineering import create_all_features
 
         logger.info("✅ ML components imported")
@@ -49,6 +50,10 @@ async def verify_components():
             # Verify Sentiment
             sentiment = SentimentAnalyzer()
             logger.info("✅ SentimentAnalyzer instantiated")
+
+            # Verify Whale Detector
+            whale = WhaleDetector()
+            logger.info("✅ WhaleDetector instantiated")
 
         except ImportError as e:
             if "TensorFlow" in str(e) or "scikit-learn" in str(e):
