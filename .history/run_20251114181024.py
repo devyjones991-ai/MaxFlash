@@ -3,6 +3,7 @@
 Production-ready скрипт запуска MaxFlash Trading System.
 Автоматически проверяет зависимости, запускает сервер и открывает браузер.
 """
+
 import importlib.util
 import os
 import socket
@@ -16,37 +17,31 @@ from pathlib import Path
 
 # Попытка импорта requests для проверки сервера
 try:
-    import requests  # noqa: F401
+    import requests
+
     HAS_REQUESTS = True
 except ImportError:
     HAS_REQUESTS = False
     # Установим requests если нет
     try:
-        subprocess.check_call([
-            sys.executable, "-m", "pip", "install",
-            "--quiet", "requests"
-        ])
-        import requests  # type: ignore  # noqa: F401
+        subprocess.check_call([sys.executable, "-m", "pip", "install", "--quiet", "requests"])
+        import requests  # type: ignore
+
         HAS_REQUESTS = True
     except (subprocess.CalledProcessError, ImportError, OSError):
         pass
 
 # Цвета для вывода (Windows и Unix)
-GREEN = '\033[92m' if sys.platform != 'win32' else ''
-YELLOW = '\033[93m' if sys.platform != 'win32' else ''
-RED = '\033[91m' if sys.platform != 'win32' else ''
-RESET = '\033[0m' if sys.platform != 'win32' else ''
+GREEN = "\033[92m" if sys.platform != "win32" else ""
+YELLOW = "\033[93m" if sys.platform != "win32" else ""
+RED = "\033[91m" if sys.platform != "win32" else ""
+RESET = "\033[0m" if sys.platform != "win32" else ""
 
 
 def print_status(message, status="info"):
     """Вывод статусных сообщений."""
-    colors = {
-        "info": GREEN,
-        "warn": YELLOW,
-        "error": RED
-    }
-    color = colors.get(status, "")
-    print(f"{color}[{status.upper()}]{RESET} {message}")
+    colors = {"info": GREEN, "warn": YELLOW, "error": RED}
+    colors.get(status, "")
 
 
 def check_python_version():
@@ -81,10 +76,7 @@ def install_dependencies():
     if missing:
         print_status(f"Установка {len(missing)} пакетов...", "warn")
         try:
-            subprocess.check_call([
-                sys.executable, "-m", "pip", "install",
-                "--quiet", "--upgrade"
-            ] + missing)
+            subprocess.check_call([sys.executable, "-m", "pip", "install", "--quiet", "--upgrade", *missing])
             print_status("Зависимости установлены!", "info")
         except subprocess.CalledProcessError:
             print_status("Ошибка установки зависимостей!", "error")
@@ -101,7 +93,7 @@ def check_port(port=8050):
     """Проверка доступности порта."""
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     try:
-        result = sock.connect_ex(('localhost', port))
+        result = sock.connect_ex(("localhost", port))
         sock.close()
         if result == 0:
             print_status(f"Порт {port} уже занят!", "warn")
@@ -133,6 +125,7 @@ def wait_for_server(url, timeout=30):
 
 def open_browser(url, delay=4):
     """Открывает браузер после задержки."""
+
     def _open():
         time.sleep(delay)
         if wait_for_server(url):
@@ -170,15 +163,6 @@ def run_dashboard(web_interface_path):
     url = "http://localhost:8050"
 
     print_status("Запуск Dashboard...", "info")
-    print()
-    print("=" * 60)
-    print("  MAXFLASH TRADING SYSTEM DASHBOARD")
-    print("=" * 60)
-    print()
-    print(f"  🌐 Dashboard: {url}")
-    print("  ⏹️  Нажмите Ctrl+C для остановки")
-    print("=" * 60)
-    print()
 
     # Запускаем открытие браузера в фоне
     open_browser(url, delay=4)
@@ -196,19 +180,17 @@ def run_dashboard(web_interface_path):
                 print_status(f"Запуск {app_file.name}...", "info")
                 os.chdir(web_interface_path)
                 # Запускаем через importlib для правильной работы
-                spec = importlib.util.spec_from_file_location(
-                    "__main__", app_file
-                )
+                spec = importlib.util.spec_from_file_location("__main__", app_file)
                 if spec and spec.loader:
                     module = importlib.util.module_from_spec(spec)
                     # Сохраняем старый __main__
-                    old_main = sys.modules.get('__main__')
-                    sys.modules['__main__'] = module
+                    old_main = sys.modules.get("__main__")
+                    sys.modules["__main__"] = module
                     try:
                         spec.loader.exec_module(module)
                     finally:
                         if old_main:
-                            sys.modules['__main__'] = old_main
+                            sys.modules["__main__"] = old_main
                 return
             except KeyboardInterrupt:
                 print_status("Остановка сервера...", "info")
@@ -228,9 +210,7 @@ def run_dashboard(web_interface_path):
 def main():
     """Главная функция."""
     try:
-        print()
         print_status("MaxFlash Trading System - Production Launch", "info")
-        print()
 
         # Проверки
         check_python_version()
@@ -240,7 +220,7 @@ def main():
         # Проверка порта
         if not check_port(8050):
             response = input("Продолжить? (y/n): ").lower()
-            if response != 'y':
+            if response != "y":
                 sys.exit(0)
 
         # Настройка
@@ -250,7 +230,6 @@ def main():
         run_dashboard(web_interface_path)
 
     except KeyboardInterrupt:
-        print()
         print_status("Остановка...", "info")
         sys.exit(0)
     except (OSError, ImportError, AttributeError, ValueError) as e:

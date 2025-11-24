@@ -1,19 +1,25 @@
 """
 Pydantic модели для валидации данных.
 """
-from typing import Literal
+
+from __future__ import annotations
+
 from datetime import datetime
-from pydantic import BaseModel, Field, model_validator, ConfigDict
+from typing import Literal
+
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class SignalType(str):
     """Тип торгового сигнала."""
+
     LONG = "LONG"
     SHORT = "SHORT"
 
 
 class OrderBlockModel(BaseModel):
     """Модель Order Block."""
+
     model_config = ConfigDict(
         json_schema_extra={
             "example": {
@@ -22,11 +28,11 @@ class OrderBlockModel(BaseModel):
                 "high": 43500.0,
                 "low": 43200.0,
                 "type": "bullish",
-                "strength": 0.85
+                "strength": 0.85,
             }
         }
     )
-    
+
     start_idx: int = Field(..., description="Индекс начала блока")
     end_idx: int = Field(..., description="Индекс конца блока")
     high: float = Field(..., description="Максимальная цена блока")
@@ -35,15 +41,16 @@ class OrderBlockModel(BaseModel):
     strength: float = Field(..., ge=0.0, le=1.0, description="Сила блока (0-1)")
     timestamp: datetime = Field(default_factory=datetime.now)
 
-    @model_validator(mode='after')
-    def end_after_start(self) -> 'OrderBlockModel':
+    @model_validator(mode="after")
+    def end_after_start(self) -> "OrderBlockModel":
         if self.end_idx <= self.start_idx:
-            raise ValueError('end_idx must be greater than start_idx')
+            raise ValueError("end_idx must be greater than start_idx")
         return self
 
 
 class FairValueGapModel(BaseModel):
     """Модель Fair Value Gap."""
+
     start_idx: int
     end_idx: int
     high: float
@@ -55,6 +62,7 @@ class FairValueGapModel(BaseModel):
 
 class SignalModel(BaseModel):
     """Модель торгового сигнала."""
+
     model_config = ConfigDict(
         json_schema_extra={
             "example": {
@@ -66,11 +74,11 @@ class SignalModel(BaseModel):
                 "confluence": 5,
                 "timeframe": "15m",
                 "indicators": ["Order Block", "Volume Profile POC", "Positive Delta"],
-                "confidence": 0.85
+                "confidence": 0.85,
             }
         }
     )
-    
+
     symbol: str = Field(..., description="Торговая пара")
     type: Literal["LONG", "SHORT"] = Field(..., description="Тип сигнала")
     entry_price: float = Field(..., gt=0, description="Цена входа")
@@ -82,18 +90,19 @@ class SignalModel(BaseModel):
     timestamp: datetime = Field(default_factory=datetime.now)
     confidence: float = Field(default=0.5, ge=0.0, le=1.0, description="Уверенность (0-1)")
 
-    @model_validator(mode='after')
-    def tp_above_entry_for_long(self) -> 'SignalModel':
+    @model_validator(mode="after")
+    def tp_above_entry_for_long(self) -> "SignalModel":
         if self.take_profit:
-            if self.type == 'LONG' and self.take_profit <= self.entry_price:
-                raise ValueError('Take profit must be above entry for LONG')
-            if self.type == 'SHORT' and self.take_profit >= self.entry_price:
-                raise ValueError('Take profit must be below entry for SHORT')
+            if self.type == "LONG" and self.take_profit <= self.entry_price:
+                raise ValueError("Take profit must be above entry for LONG")
+            if self.type == "SHORT" and self.take_profit >= self.entry_price:
+                raise ValueError("Take profit must be below entry for SHORT")
         return self
 
 
 class VolumeProfileModel(BaseModel):
     """Модель Volume Profile."""
+
     poc: float = Field(..., description="Point of Control")
     vah: float = Field(..., description="Value Area High")
     val: float = Field(..., description="Value Area Low")
@@ -104,6 +113,7 @@ class VolumeProfileModel(BaseModel):
 
 class MarketProfileModel(BaseModel):
     """Модель Market Profile."""
+
     vah: float = Field(..., description="Value Area High")
     val: float = Field(..., description="Value Area Low")
     poc: float = Field(..., description="Point of Control")
@@ -114,6 +124,7 @@ class MarketProfileModel(BaseModel):
 
 class ConfluenceZoneModel(BaseModel):
     """Модель зоны конfluence."""
+
     price_level: float = Field(..., gt=0, description="Ценовой уровень")
     strength: float = Field(..., ge=0.0, le=1.0, description="Сила зоны")
     indicators: list[str] = Field(..., description="Индикаторы в зоне")
@@ -123,6 +134,7 @@ class ConfluenceZoneModel(BaseModel):
 
 class TradeRequest(BaseModel):
     """Запрос на создание сделки."""
+
     symbol: str
     side: Literal["buy", "sell"]
     amount: float | None = None
@@ -133,6 +145,7 @@ class TradeRequest(BaseModel):
 
 class TradeResponse(BaseModel):
     """Ответ на создание сделки."""
+
     success: bool
     trade_id: str | None = None
     message: str
@@ -141,6 +154,7 @@ class TradeResponse(BaseModel):
 
 class HealthResponse(BaseModel):
     """Статус здоровья системы."""
+
     status: Literal["healthy", "degraded", "unhealthy"]
     version: str
     timestamp: datetime = Field(default_factory=datetime.now)
@@ -149,7 +163,7 @@ class HealthResponse(BaseModel):
 
 class ErrorResponse(BaseModel):
     """Модель ошибки."""
+
     error: str
     detail: str | None = None
     timestamp: datetime = Field(default_factory=datetime.now)
-

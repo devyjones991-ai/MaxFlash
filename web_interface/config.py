@@ -1,6 +1,7 @@
 """
 Конфигурация для web интерфейса.
 """
+
 import os
 from pathlib import Path
 
@@ -28,5 +29,3 @@ BACKTEST_RESULTS_DIR = DATA_DIR / "backtest_results"
 # Логирование
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 LOG_FILE = LOGS_DIR / "dashboard.log"
-
-

@@ -2,12 +2,13 @@
 Продвинутое кэширование для рыночных данных.
 Поддержка Redis для production и in-memory для development.
 """
-import json
-import time
-from typing import Dict, List, Optional, Any, Tuple
-from datetime import datetime, timedelta
-import threading
+
+import contextlib
 import hashlib
+import json
+import threading
+from datetime import datetime
+from typing import Any, Optional
 
 from utils.logger_config import setup_logging
 
@@ -16,6 +17,7 @@ logger = setup_logging()
 # Попытка импортировать Redis (опционально)
 try:
     import redis
+
     HAS_REDIS = True
 except ImportError:
     HAS_REDIS = False
@@ -27,7 +29,7 @@ class MarketCache:
     Продвинутый кэш для рыночных данных с поддержкой Redis.
     """
 
-    def __init__(self, use_redis: bool = False, redis_host: str = 'localhost', redis_port: int = 6379):
+    def __init__(self, use_redis: bool = False, redis_host: str = "localhost", redis_port: int = 6379):
         """
         Инициализация кэша.
 
@@ -37,16 +39,13 @@ class MarketCache:
             redis_port: Порт Redis
         """
         self.use_redis = use_redis and HAS_REDIS
-        self.memory_cache: Dict[str, Tuple[Any, datetime]] = {}
+        self.memory_cache: dict[str, tuple[Any, datetime]] = {}
         self.lock = threading.Lock()
-        
+
         if self.use_redis:
             try:
                 self.redis_client = redis.Redis(
-                    host=redis_host,
-                    port=redis_port,
-                    decode_responses=True,
-                    socket_connect_timeout=2
+                    host=redis_host, port=redis_port, decode_responses=True, socket_connect_timeout=2
                 )
                 self.redis_client.ping()
                 logger.info("Redis cache initialized successfully")
@@ -62,7 +61,7 @@ class MarketCache:
         key_parts = [prefix] + [str(arg) for arg in args]
         if kwargs:
             key_parts.append(json.dumps(kwargs, sort_keys=True))
-        key_string = ':'.join(key_parts)
+        key_string = ":".join(key_parts)
         return hashlib.md5(key_string.encode()).hexdigest()
 
     def get(self, key: str, ttl_seconds: int = 300) -> Optional[Any]:
@@ -105,11 +104,7 @@ class MarketCache:
         """
         if self.use_redis and self.redis_client:
             try:
-                self.redis_client.setex(
-                    key,
-                    ttl_seconds,
-                    json.dumps(value, default=str)
-                )
+                self.redis_client.setex(key, ttl_seconds, json.dumps(value, default=str))
                 return
             except Exception as e:
                 logger.warning("Redis set error: %s", str(e))
@@ -125,7 +120,8 @@ class MarketCache:
         """Очистить старые записи из памяти."""
         current_time = datetime.now()
         keys_to_delete = [
-            key for key, (_, timestamp) in self.memory_cache.items()
+            key
+            for key, (_, timestamp) in self.memory_cache.items()
             if (current_time - timestamp).total_seconds() > ttl_seconds
         ]
         for key in keys_to_delete[:1000]:  # Удаляем по 1000 за раз
@@ -149,24 +145,18 @@ class MarketCache:
         with self.lock:
             if pattern:
                 # Простая фильтрация по паттерну для памяти
-                keys_to_delete = [k for k in self.memory_cache.keys() if pattern in k]
+                keys_to_delete = [k for k in self.memory_cache if pattern in k]
                 for key in keys_to_delete:
                     del self.memory_cache[key]
             else:
                 self.memory_cache.clear()
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         """Получить статистику кэша."""
-        stats = {
-            'type': 'redis' if self.use_redis else 'memory',
-            'memory_entries': len(self.memory_cache)
-        }
-        
-        if self.use_redis and self.redis_client:
-            try:
-                stats['redis_keys'] = self.redis_client.dbsize()
-            except Exception:
-                pass
-        
-        return stats
+        stats = {"type": "redis" if self.use_redis else "memory", "memory_entries": len(self.memory_cache)}
 
+        if self.use_redis and self.redis_client:
+            with contextlib.suppress(Exception):
+                stats["redis_keys"] = self.redis_client.dbsize()
+
+        return stats

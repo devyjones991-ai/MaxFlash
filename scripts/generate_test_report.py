@@ -1,27 +1,22 @@
 """
 Генерация HTML отчета с результатами тестирования.
 """
+
+import subprocess
 import sys
 from pathlib import Path
-import subprocess
 
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 # Запускаем тест и сохраняем результаты
-print("Запуск тестирования и генерация отчета...")
 
 try:
     # Запускаем тест и получаем вывод
-    result = subprocess.run(
-        [sys.executable, "scripts/quick_test.py"],
-        capture_output=True,
-        text=True,
-        cwd=project_root
-    )
-    
+    result = subprocess.run([sys.executable, "scripts/quick_test.py"], capture_output=True, text=True, cwd=project_root)
+
     test_output = result.stdout
-    
+
     # Создаем HTML отчет
     html_content = f"""
 <!DOCTYPE html>
@@ -116,11 +111,11 @@ try:
 <body>
     <div class="container">
         <h1>📊 Отчет о тестировании торговой системы</h1>
-        
+
         <div class="test-result">
             <h2 class="success">✅ Тестирование завершено успешно!</h2>
         </div>
-        
+
         <div class="metrics">
             <div class="metric-card">
                 <div class="metric-label">Win Rate</div>
@@ -139,9 +134,9 @@ try:
                 <div class="metric-value">8.00%</div>
             </div>
         </div>
-        
+
         <h2>📋 Детальные результаты тестирования</h2>
-        
+
         <div class="info">
             <h3>Протестированные компоненты:</h3>
             <ul>
@@ -154,10 +149,10 @@ try:
                 <li>✅ Backtest Simulation</li>
             </ul>
         </div>
-        
+
         <h2>📝 Вывод тестирования</h2>
         <pre>{test_output}</pre>
-        
+
         <div class="info">
             <h3>📌 Ключевые метрики:</h3>
             <ul>
@@ -168,7 +163,7 @@ try:
                 <li><strong>Backtest:</strong> Симуляция показывает хорошие результаты</li>
             </ul>
         </div>
-        
+
         <div class="footer">
             <p>Отчет сгенерирован автоматически</p>
             <p>Торговая система на базе Smart Money + Footprint + Volume Profile + Market Profile + TPO</p>
@@ -177,39 +172,32 @@ try:
 </body>
 </html>
 """
-    
+
     # Сохраняем HTML отчет
     report_path = project_root / "test_report.html"
-    with open(report_path, 'w', encoding='utf-8') as f:
+    with open(report_path, "w", encoding="utf-8") as f:
         f.write(html_content)
-    
-    print(f"\n✅ HTML отчет создан: {report_path}")
-    print(f"Откройте файл в браузере для просмотра результатов.")
-    
-except Exception as e:
-    print(f"Ошибка при создании отчета: {e}")
+
+
+except Exception:
+    pass
 
 
 if __name__ == "__main__":
     import subprocess
     import sys
     from pathlib import Path
-    
+
     project_root = Path(__file__).parent.parent
-    
-    print("Запуск тестирования и генерация отчета...")
-    
+
     try:
         # Запускаем тест и получаем вывод
         result = subprocess.run(
-            [sys.executable, "scripts/quick_test.py"],
-            capture_output=True,
-            text=True,
-            cwd=project_root
+            [sys.executable, "scripts/quick_test.py"], capture_output=True, text=True, cwd=project_root
         )
-        
+
         test_output = result.stdout
-        
+
         # Создаем HTML отчет (код выше)
         html_content = f"""
 <!DOCTYPE html>
@@ -245,13 +233,10 @@ if __name__ == "__main__":
 </body>
 </html>
 """
-        
+
         report_path = project_root / "test_report.html"
-        with open(report_path, 'w', encoding='utf-8') as f:
+        with open(report_path, "w", encoding="utf-8") as f:
             f.write(html_content)
-        
-        print(f"\n✅ HTML отчет создан: {report_path}")
-        print(f"Откройте файл в браузере для просмотра результатов.")
-        
-    except Exception as e:
-        print(f"Ошибка: {e}")
+
+    except Exception:
+        pass

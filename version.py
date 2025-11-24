@@ -60,9 +60,7 @@ def get_version_info() -> dict:
     return info
 
 
-def increment_version(
-    major: bool = False, minor: bool = False, patch: bool = True
-) -> str:
+def increment_version(major: bool = False, minor: bool = False, patch: bool = True) -> str:
     """
     Инкрементировать версию (для использования в скриптах).
 
@@ -77,19 +75,12 @@ def increment_version(
     # Эта функция используется только для генерации новой версии
     # Реальная версия должна обновляться вручную или через CI/CD
     new_major = VERSION_MAJOR + 1 if major else VERSION_MAJOR
-    new_minor = (
-        VERSION_MINOR + 1 if minor else (0 if major else VERSION_MINOR)
-    )
-    new_patch = (
-        VERSION_PATCH + 1
-        if patch and not (major or minor)
-        else (0 if (major or minor) else VERSION_PATCH)
-    )
+    new_minor = VERSION_MINOR + 1 if minor else (0 if major else VERSION_MINOR)
+    new_patch = VERSION_PATCH + 1 if patch and not (major or minor) else (0 if (major or minor) else VERSION_PATCH)
 
     return f"{new_major}.{new_minor}.{new_patch}"
 
 
 if __name__ == "__main__":
     # Вывод версии для использования в скриптах
-    print(get_version())
-
+    pass

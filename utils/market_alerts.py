@@ -2,10 +2,11 @@
 Система алертов для рыночных событий.
 Отслеживание значительных изменений цен, объемов, прорывов уровней.
 """
-from typing import Dict, List, Optional, Callable, Any
-from datetime import datetime
-from collections import defaultdict
+
 import threading
+from collections import defaultdict
+from datetime import datetime
+from typing import Any, Callable, Optional
 
 from utils.logger_config import setup_logging
 from utils.market_data_manager import MarketDataManager
@@ -17,12 +18,7 @@ class MarketAlert:
     """Класс для представления алерта."""
 
     def __init__(
-        self,
-        symbol: str,
-        alert_type: str,
-        message: str,
-        severity: str = 'info',
-        timestamp: Optional[datetime] = None
+        self, symbol: str, alert_type: str, message: str, severity: str = "info", timestamp: Optional[datetime] = None
     ):
         """
         Инициализация алерта.
@@ -40,14 +36,14 @@ class MarketAlert:
         self.severity = severity
         self.timestamp = timestamp or datetime.now()
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Преобразовать алерт в словарь."""
         return {
-            'symbol': self.symbol,
-            'type': self.alert_type,
-            'message': self.message,
-            'severity': self.severity,
-            'timestamp': self.timestamp.isoformat()
+            "symbol": self.symbol,
+            "type": self.alert_type,
+            "message": self.message,
+            "severity": self.severity,
+            "timestamp": self.timestamp.isoformat(),
         }
 
 
@@ -64,17 +60,17 @@ class MarketAlerts:
             data_manager: Менеджер данных рынка
         """
         self.data_manager = data_manager or MarketDataManager()
-        self.alerts: List[MarketAlert] = []
-        self.alert_callbacks: List[Callable[[MarketAlert], None]] = []
-        self.price_history: Dict[str, List[float]] = defaultdict(list)
-        self.volume_history: Dict[str, List[float]] = defaultdict(list)
+        self.alerts: list[MarketAlert] = []
+        self.alert_callbacks: list[Callable[[MarketAlert], None]] = []
+        self.price_history: dict[str, list[float]] = defaultdict(list)
+        self.volume_history: dict[str, list[float]] = defaultdict(list)
         self.lock = threading.Lock()
-        
+
         # Пороги для алертов
         self.thresholds = {
-            'price_change_percent': 5.0,  # 5% изменение цены
-            'volume_surge_multiplier': 2.0,  # Увеличение объема в 2 раза
-            'breakout_percent': 2.0,  # Прорыв уровня на 2%
+            "price_change_percent": 5.0,  # 5% изменение цены
+            "volume_surge_multiplier": 2.0,  # Увеличение объема в 2 раза
+            "breakout_percent": 2.0,  # Прорыв уровня на 2%
         }
 
     def add_callback(self, callback: Callable[[MarketAlert], None]):
@@ -116,20 +112,20 @@ class MarketAlerts:
             return False
 
         change_percent = abs((current_price - previous_price) / previous_price) * 100
-        
-        if change_percent >= self.thresholds['price_change_percent']:
+
+        if change_percent >= self.thresholds["price_change_percent"]:
             direction = "вверх" if current_price > previous_price else "вниз"
-            severity = 'critical' if change_percent >= 10 else 'warning'
-            
+            severity = "critical" if change_percent >= 10 else "warning"
+
             alert = MarketAlert(
                 symbol=symbol,
-                alert_type='price_spike',
+                alert_type="price_spike",
                 message=f"Резкое движение цены {direction} на {change_percent:.2f}%",
-                severity=severity
+                severity=severity,
             )
             self._trigger_alert(alert)
             return True
-        
+
         return False
 
     def check_volume_surge(self, symbol: str, current_volume: float, avg_volume: float):
@@ -145,13 +141,13 @@ class MarketAlerts:
             return
 
         surge_multiplier = current_volume / avg_volume
-        
-        if surge_multiplier >= self.thresholds['volume_surge_multiplier']:
+
+        if surge_multiplier >= self.thresholds["volume_surge_multiplier"]:
             alert = MarketAlert(
                 symbol=symbol,
-                alert_type='volume_surge',
+                alert_type="volume_surge",
                 message=f"Всплеск объема: {surge_multiplier:.1f}x среднего",
-                severity='warning'
+                severity="warning",
             )
             self._trigger_alert(alert)
 
@@ -167,27 +163,27 @@ class MarketAlerts:
         """
         if current_price > resistance:
             breakout_percent = ((current_price - resistance) / resistance) * 100
-            if breakout_percent >= self.thresholds['breakout_percent']:
+            if breakout_percent >= self.thresholds["breakout_percent"]:
                 alert = MarketAlert(
                     symbol=symbol,
-                    alert_type='breakout',
+                    alert_type="breakout",
                     message=f"Прорыв сопротивления на {breakout_percent:.2f}%",
-                    severity='warning'
-                )
-                self._trigger_alert(alert)
-        
-        elif current_price < support:
-            breakdown_percent = ((support - current_price) / support) * 100
-            if breakdown_percent >= self.thresholds['breakout_percent']:
-                alert = MarketAlert(
-                    symbol=symbol,
-                    alert_type='breakdown',
-                    message=f"Прорыв поддержки на {breakdown_percent:.2f}%",
-                    severity='warning'
+                    severity="warning",
                 )
                 self._trigger_alert(alert)
 
-    def get_recent_alerts(self, limit: int = 50) -> List[Dict[str, Any]]:
+        elif current_price < support:
+            breakdown_percent = ((support - current_price) / support) * 100
+            if breakdown_percent >= self.thresholds["breakout_percent"]:
+                alert = MarketAlert(
+                    symbol=symbol,
+                    alert_type="breakdown",
+                    message=f"Прорыв поддержки на {breakdown_percent:.2f}%",
+                    severity="warning",
+                )
+                self._trigger_alert(alert)
+
+    def get_recent_alerts(self, limit: int = 50) -> list[dict[str, Any]]:
         """
         Получить последние алерты.
 
@@ -201,7 +197,7 @@ class MarketAlerts:
             recent = self.alerts[-limit:]
             return [alert.to_dict() for alert in recent]
 
-    def get_alerts_by_symbol(self, symbol: str, limit: int = 20) -> List[Dict[str, Any]]:
+    def get_alerts_by_symbol(self, symbol: str, limit: int = 20) -> list[dict[str, Any]]:
         """
         Получить алерты для конкретной пары.
 
@@ -216,4 +212,3 @@ class MarketAlerts:
             symbol_alerts = [a for a in self.alerts if a.symbol == symbol]
             recent = symbol_alerts[-limit:]
             return [alert.to_dict() for alert in recent]
-

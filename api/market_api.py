@@ -2,14 +2,16 @@
 API endpoints для получения данных рынка.
 FastAPI endpoints для market overview, pairs, tickers, sectors, correlations.
 """
-from typing import List, Optional, Dict, Any
+
+from typing import Any, Optional
+
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
-from utils.market_data_manager import MarketDataManager
-from utils.market_analytics import MarketAnalytics
+from config.market_config import get_all_sectors
 from utils.market_alerts import MarketAlerts
-from config.market_config import get_all_sectors, get_sector_for_pair
+from utils.market_analytics import MarketAnalytics
+from utils.market_data_manager import MarketDataManager
 
 router = APIRouter(prefix="/api/market", tags=["market"])
 
@@ -21,6 +23,7 @@ alerts = MarketAlerts(data_manager)
 
 class MarketOverviewResponse(BaseModel):
     """Ответ с обзором рынка."""
+
     total_pairs: int
     active_pairs: int
     total_volume_24h: float
@@ -28,11 +31,12 @@ class MarketOverviewResponse(BaseModel):
     pairs_up_24h: int
     pairs_down_24h: int
     btc_dominance: float
-    top_volume_pairs: List[Dict[str, Any]]
+    top_volume_pairs: list[dict[str, Any]]
 
 
 class PairInfo(BaseModel):
     """Информация о торговой паре."""
+
     symbol: str
     price: float
     change_24h: float
@@ -57,10 +61,8 @@ async def get_market_overview():
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/pairs", response_model=List[str])
-async def get_all_pairs(
-    exchange_id: Optional[str] = Query(None, description="ID биржи")
-):
+@router.get("/pairs", response_model=list[str])
+async def get_all_pairs(exchange_id: Optional[str] = Query(None, description="ID биржи")):
     """
     Получить список всех торговых пар.
 
@@ -77,10 +79,10 @@ async def get_all_pairs(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/tickers", response_model=Dict[str, Dict[str, Any]])
+@router.get("/tickers", response_model=dict[str, dict[str, Any]])
 async def get_tickers(
-    exchange_id: str = Query('binance', description="ID биржи"),
-    symbols: Optional[List[str]] = Query(None, description="Список пар")
+    exchange_id: str = Query("binance", description="ID биржи"),
+    symbols: Optional[list[str]] = Query(None, description="Список пар"),
 ):
     """
     Получить тикеры для торговых пар.
@@ -99,7 +101,7 @@ async def get_tickers(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/sectors", response_model=List[str])
+@router.get("/sectors", response_model=list[str])
 async def get_sectors():
     """
     Получить список всех секторов.
@@ -114,7 +116,7 @@ async def get_sectors():
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/sectors/{sector}", response_model=Dict[str, Any])
+@router.get("/sectors/{sector}", response_model=dict[str, Any])
 async def get_sector_performance(sector: str):
     """
     Получить производительность сектора.
@@ -128,10 +130,7 @@ async def get_sector_performance(sector: str):
     try:
         performance = analytics.get_sector_performance(sector)
         if not performance:
-            raise HTTPException(
-                status_code=404,
-                detail=f"Сектор {sector} не найден"
-            )
+            raise HTTPException(status_code=404, detail=f"Сектор {sector} не найден")
         return performance
     except HTTPException:
         raise
@@ -139,12 +138,12 @@ async def get_sector_performance(sector: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/correlations", response_model=Dict[str, Any])
+@router.get("/correlations", response_model=dict[str, Any])
 async def get_correlations(
-    pairs: List[str] = Query(..., description="Список пар для анализа"),
-    timeframe: str = Query('1h', description="Таймфрейм"),
+    pairs: list[str] = Query(..., description="Список пар для анализа"),
+    timeframe: str = Query("1h", description="Таймфрейм"),
     period_days: int = Query(30, description="Период анализа в днях"),
-    exchange_id: str = Query('binance', description="ID биржи")
+    exchange_id: str = Query("binance", description="ID биржи"),
 ):
     """
     Получить корреляционную матрицу между парами.
@@ -159,24 +158,19 @@ async def get_correlations(
         Корреляционная матрица
     """
     try:
-        correlation_matrix = analytics.calculate_correlations(
-            pairs, timeframe, period_days, exchange_id
-        )
+        correlation_matrix = analytics.calculate_correlations(pairs, timeframe, period_days, exchange_id)
         # Конвертируем DataFrame в словарь
-        return {
-            'matrix': correlation_matrix.to_dict(),
-            'pairs': list(correlation_matrix.index)
-        }
+        return {"matrix": correlation_matrix.to_dict(), "pairs": list(correlation_matrix.index)}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/trends/{symbol}", response_model=Dict[str, Any])
+@router.get("/trends/{symbol}", response_model=dict[str, Any])
 async def get_trend(
     symbol: str,
-    timeframe: str = Query('4h', description="Таймфрейм"),
+    timeframe: str = Query("4h", description="Таймфрейм"),
     period_days: int = Query(7, description="Период анализа"),
-    exchange_id: str = Query('binance', description="ID биржи")
+    exchange_id: str = Query("binance", description="ID биржи"),
 ):
     """
     Получить тренд для торговой пары.
@@ -191,19 +185,17 @@ async def get_trend(
         Информация о тренде
     """
     try:
-        trend = analytics.detect_trends(
-            symbol, timeframe, period_days, exchange_id
-        )
+        trend = analytics.detect_trends(symbol, timeframe, period_days, exchange_id)
         return trend
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/opportunities", response_model=List[Dict[str, Any]])
+@router.get("/opportunities", response_model=list[dict[str, Any]])
 async def get_opportunities(
-    pairs: Optional[List[str]] = Query(None, description="Список пар"),
+    pairs: Optional[list[str]] = Query(None, description="Список пар"),
     min_correlation: float = Query(0.7, description="Минимальная корреляция"),
-    exchange_id: str = Query('binance', description="ID биржи")
+    exchange_id: str = Query("binance", description="ID биржи"),
 ):
     """
     Найти торговые возможности.
@@ -217,18 +209,16 @@ async def get_opportunities(
         Список возможностей
     """
     try:
-        opportunities = analytics.find_opportunities(
-            pairs, min_correlation, exchange_id
-        )
+        opportunities = analytics.find_opportunities(pairs, min_correlation, exchange_id)
         return opportunities
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/alerts", response_model=List[Dict[str, Any]])
+@router.get("/alerts", response_model=list[dict[str, Any]])
 async def get_alerts(
     symbol: Optional[str] = Query(None, description="Фильтр по символу"),
-    limit: int = Query(50, description="Количество алертов")
+    limit: int = Query(50, description="Количество алертов"),
 ):
     """
     Получить рыночные алерты.
@@ -241,11 +231,7 @@ async def get_alerts(
         Список алертов
     """
     try:
-        if symbol:
-            alerts_list = alerts.get_alerts_by_symbol(symbol, limit)
-        else:
-            alerts_list = alerts.get_recent_alerts(limit)
+        alerts_list = alerts.get_alerts_by_symbol(symbol, limit) if symbol else alerts.get_recent_alerts(limit)
         return alerts_list
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-

@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Быстрый запуск dashboard - минимальная версия."""
-import sys
+
 import os
+import sys
 from pathlib import Path
 
 # Настройка путей
@@ -12,10 +13,11 @@ os.chdir(project_root / "web_interface")
 
 # Импорт и запуск
 try:
-    from app_simple import create_simple_app
-    import webbrowser
     import threading
     import time
+    import webbrowser
+
+    from app_simple import create_simple_app
 
     app = create_simple_app()
 
@@ -25,18 +27,10 @@ try:
 
     threading.Thread(target=open_browser, daemon=True).start()
 
-    print("\n" + "="*60)
-    print("  🚀 MAXFLASH DASHBOARD ЗАПУЩЕН")
-    print("="*60)
-    print("  🌐 http://localhost:8050")
-    print("  ⏹️  Ctrl+C для остановки")
-    print("="*60 + "\n")
+    app.run_server(debug=False, host="127.0.0.1", port=8050)
 
-    app.run_server(debug=False, host='127.0.0.1', port=8050)
-
-except Exception as e:
-    print(f"❌ Ошибка: {e}")
+except Exception:
     import traceback
+
     traceback.print_exc()
     sys.exit(1)
-

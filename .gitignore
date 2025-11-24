@@ -39,6 +39,7 @@ data/backtest_results/*.json
 data/backtest_results/*.csv
 
 # Config secrets
+.env
 config/*.env
 config/secrets.json
 *.key
@@ -61,6 +62,7 @@ htmlcov/
 .coverage
 .coverage.*
 .pytest_cache/
+.ruff_cache/
 
 # OS
 .DS_Store

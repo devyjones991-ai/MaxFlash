@@ -2,14 +2,16 @@
 Менеджер WebSocket для интеграции real-time обновлений в dashboard.
 Управляет WebSocket соединениями и обновляет данные в реальном времени.
 """
+
 import threading
-from typing import Dict, List, Optional, Callable, Any
 from collections import defaultdict
+from typing import Any, Callable, Optional
 
 from utils.logger_config import setup_logging
 
 try:
     from web_interface.services.websocket_stream import WebSocketPriceStream
+
     HAS_WEBSOCKET = True
 except ImportError:
     HAS_WEBSOCKET = False
@@ -23,7 +25,7 @@ class WebSocketManager:
     Менеджер WebSocket для real-time обновлений в dashboard.
     """
 
-    def __init__(self, exchange_name: str = 'binance'):
+    def __init__(self, exchange_name: str = "binance"):
         """
         Инициализация менеджера WebSocket.
 
@@ -39,8 +41,8 @@ class WebSocketManager:
         self.exchange_name = exchange_name
         self.stream = WebSocketPriceStream(exchange_name=exchange_name)
         self.is_available = True
-        self.subscribers: Dict[str, List[Callable]] = defaultdict(list)
-        self.price_cache: Dict[str, Dict[str, Any]] = {}
+        self.subscribers: dict[str, list[Callable]] = defaultdict(list)
+        self.price_cache: dict[str, dict[str, Any]] = {}
         self.lock = threading.Lock()
 
     def start(self):
@@ -64,7 +66,7 @@ class WebSocketManager:
             except Exception as e:
                 logger.error("Ошибка остановки WebSocket: %s", str(e))
 
-    def subscribe(self, symbol: str, callback: Callable[[Dict[str, Any]], None]):
+    def subscribe(self, symbol: str, callback: Callable[[dict[str, Any]], None]):
         """
         Подписаться на обновления цены для символа.
 
@@ -76,7 +78,7 @@ class WebSocketManager:
             logger.warning("WebSocket недоступен для подписки на %s", symbol)
             return
 
-        def price_update_handler(price_data: Dict[str, Any]):
+        def price_update_handler(price_data: dict[str, Any]):
             """Обработчик обновлений цены."""
             try:
                 # Обновляем кэш
@@ -89,10 +91,7 @@ class WebSocketManager:
                         try:
                             cb(price_data)
                         except Exception as e:
-                            logger.error(
-                                "Ошибка в callback для %s: %s",
-                                symbol, str(e)
-                            )
+                            logger.error("Ошибка в callback для %s: %s", symbol, str(e))
             except Exception as e:
                 logger.error("Ошибка обработки обновления цены: %s", str(e))
 
@@ -118,7 +117,7 @@ class WebSocketManager:
 
         logger.debug("Отписка от %s", symbol)
 
-    def get_latest_price(self, symbol: str) -> Optional[Dict[str, Any]]:
+    def get_latest_price(self, symbol: str) -> Optional[dict[str, Any]]:
         """
         Получить последнюю цену из кэша.
 
@@ -131,7 +130,7 @@ class WebSocketManager:
         with self.lock:
             return self.price_cache.get(symbol)
 
-    def get_all_prices(self) -> Dict[str, Dict[str, Any]]:
+    def get_all_prices(self) -> dict[str, dict[str, Any]]:
         """
         Получить все кэшированные цены.
 
@@ -145,14 +144,14 @@ class WebSocketManager:
         """Проверить, подключен ли WebSocket."""
         if not self.is_available or not self.stream:
             return False
-        return self.stream.is_connected if hasattr(self.stream, 'is_connected') else False
+        return self.stream.is_connected if hasattr(self.stream, "is_connected") else False
 
 
 # Глобальный экземпляр менеджера
 _global_ws_manager: Optional[WebSocketManager] = None
 
 
-def get_websocket_manager(exchange_name: str = 'binance') -> WebSocketManager:
+def get_websocket_manager(exchange_name: str = "binance") -> WebSocketManager:
     """
     Получить глобальный экземпляр WebSocket менеджера.
 
@@ -166,4 +165,3 @@ def get_websocket_manager(exchange_name: str = 'binance') -> WebSocketManager:
     if _global_ws_manager is None:
         _global_ws_manager = WebSocketManager(exchange_name=exchange_name)
     return _global_ws_manager
-

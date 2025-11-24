@@ -3,18 +3,20 @@
 Запускается в отдельном потоке и периодически проверяет рынок на события.
 Поддерживает WebSocket для real-time обновлений.
 """
+
 import threading
 import time
-from typing import List, Optional, Dict, Any
-from datetime import datetime, timedelta
+from datetime import datetime
+from typing import Any, Optional
 
-from utils.logger_config import setup_logging
-from utils.market_data_manager import MarketDataManager
-from utils.market_alerts import MarketAlerts
 from config.market_config import POPULAR_PAIRS
+from utils.logger_config import setup_logging
+from utils.market_alerts import MarketAlerts
+from utils.market_data_manager import MarketDataManager
 
 try:
     from utils.websocket_manager import get_websocket_manager
+
     HAS_WEBSOCKET = True
 except ImportError:
     HAS_WEBSOCKET = False
@@ -33,8 +35,8 @@ class MarketMonitor:
         data_manager: Optional[MarketDataManager] = None,
         alerts: Optional[MarketAlerts] = None,
         monitoring_interval: int = 30,
-        symbols: Optional[List[str]] = None,
-        use_websocket: bool = True
+        symbols: Optional[list[str]] = None,
+        use_websocket: bool = True,
     ):
         """
         Инициализация монитора рынка.
@@ -52,17 +54,17 @@ class MarketMonitor:
         self.symbols = symbols or POPULAR_PAIRS[:50]  # Мониторим топ-50 пар
         self.is_running = False
         self.monitor_thread: Optional[threading.Thread] = None
-        self.price_history: Dict[str, List[float]] = {}
-        self.volume_history: Dict[str, List[float]] = {}
-        self.last_check_time: Dict[str, datetime] = {}
+        self.price_history: dict[str, list[float]] = {}
+        self.volume_history: dict[str, list[float]] = {}
+        self.last_check_time: dict[str, datetime] = {}
         self.telegram_bot = None  # Будет установлен из app.py
-        
+
         # WebSocket для real-time обновлений
         self.use_websocket = use_websocket and HAS_WEBSOCKET
         self.ws_manager = None
         if self.use_websocket:
             try:
-                self.ws_manager = get_websocket_manager('binance')
+                self.ws_manager = get_websocket_manager("binance")
                 if not self.ws_manager.is_available:
                     self.use_websocket = False
                     logger.info("WebSocket недоступен, используем polling")
@@ -84,16 +86,9 @@ class MarketMonitor:
                 self.ws_manager.start()
                 for symbol in self.symbols:
                     self.ws_manager.subscribe(symbol, self._websocket_price_callback)
-                logger.info(
-                    "Мониторинг рынка запущен через WebSocket для %s пар",
-                    len(self.symbols)
-                )
+                logger.info("Мониторинг рынка запущен через WebSocket для %s пар", len(self.symbols))
                 # Запускаем polling как fallback
-                self.monitor_thread = threading.Thread(
-                    target=self._monitor_loop,
-                    daemon=True,
-                    name="MarketMonitor"
-                )
+                self.monitor_thread = threading.Thread(target=self._monitor_loop, daemon=True, name="MarketMonitor")
                 self.monitor_thread.start()
                 return
             except Exception as e:
@@ -101,16 +96,12 @@ class MarketMonitor:
                 self.use_websocket = False
 
         # Fallback на polling
-        self.monitor_thread = threading.Thread(
-            target=self._monitor_loop,
-            daemon=True,
-            name="MarketMonitor"
-        )
+        self.monitor_thread = threading.Thread(target=self._monitor_loop, daemon=True, name="MarketMonitor")
         self.monitor_thread.start()
         logger.info(
             "Мониторинг рынка запущен (polling) для %s пар с интервалом %s сек",
             len(self.symbols),
-            self.monitoring_interval
+            self.monitoring_interval,
         )
 
     def stop(self):
@@ -125,7 +116,7 @@ class MarketMonitor:
             self.monitor_thread.join(timeout=5)
         logger.info("Мониторинг рынка остановлен")
 
-    def _websocket_price_callback(self, price_data: Dict[str, Any]):
+    def _websocket_price_callback(self, price_data: dict[str, Any]):
         """
         Callback для обработки обновлений цен через WebSocket.
 
@@ -133,18 +124,18 @@ class MarketMonitor:
             price_data: Данные о цене
         """
         try:
-            symbol = price_data.get('symbol')
+            symbol = price_data.get("symbol")
             if not symbol:
                 return
 
-            current_price = price_data.get('price', 0)
-            current_volume = price_data.get('volume', 0)
+            current_price = price_data.get("price", 0)
+            current_volume = price_data.get("volume", 0)
 
             if current_price == 0:
                 return
 
             # Проверяем изменение цены
-            if symbol in self.price_history and self.price_history[symbol]:
+            if self.price_history.get(symbol):
                 previous_price = self.price_history[symbol][-1]
                 spike_detected = self.alerts.check_price_spike(symbol, current_price, previous_price)
                 # Отправляем уведомление в Telegram если есть бот
@@ -160,7 +151,7 @@ class MarketMonitor:
                 self.price_history[symbol] = self.price_history[symbol][-10:]
 
             # Проверяем всплеск объема
-            if symbol in self.volume_history and self.volume_history[symbol]:
+            if self.volume_history.get(symbol):
                 avg_volume = sum(self.volume_history[symbol]) / len(self.volume_history[symbol])
                 self.alerts.check_volume_surge(symbol, current_volume, avg_volume)
 
@@ -200,12 +191,12 @@ class MarketMonitor:
         for symbol in self.symbols:
             try:
                 # Получаем текущий тикер
-                ticker = self.data_manager.get_ticker(symbol, 'binance')
+                ticker = self.data_manager.get_ticker(symbol, "binance")
                 if not ticker:
                     continue
 
-                current_price = ticker.get('last', 0)
-                current_volume = ticker.get('quoteVolume', 0)
+                current_price = ticker.get("last", 0)
+                current_volume = ticker.get("quoteVolume", 0)
 
                 if current_price == 0:
                     continue
@@ -216,7 +207,9 @@ class MarketMonitor:
                     spike_detected = self.alerts.check_price_spike(symbol, current_price, previous_price)
                     # Отправляем уведомление в Telegram если есть бот
                     if spike_detected and self.telegram_bot:
-                        change_pct = ((current_price - previous_price) / previous_price * 100) if previous_price > 0 else 0
+                        change_pct = (
+                            ((current_price - previous_price) / previous_price * 100) if previous_price > 0 else 0
+                        )
                         self.telegram_bot.send_price_alert(symbol, current_price, change_pct, "spike")
                 else:
                     self.price_history[symbol] = []
@@ -228,7 +221,11 @@ class MarketMonitor:
 
                 # Проверяем всплеск объема
                 if symbol in self.volume_history:
-                    avg_volume = sum(self.volume_history[symbol]) / len(self.volume_history[symbol]) if self.volume_history[symbol] else current_volume
+                    avg_volume = (
+                        sum(self.volume_history[symbol]) / len(self.volume_history[symbol])
+                        if self.volume_history[symbol]
+                        else current_volume
+                    )
                     self.alerts.check_volume_surge(symbol, current_volume, avg_volume)
                 else:
                     self.volume_history[symbol] = []
@@ -248,10 +245,7 @@ class MarketMonitor:
                 self.last_check_time[symbol] = datetime.now()
 
             except Exception as e:
-                logger.warning(
-                    "Ошибка проверки событий для %s: %s",
-                    symbol, str(e)
-                )
+                logger.warning("Ошибка проверки событий для %s: %s", symbol, str(e))
                 continue
 
         logger.debug("Проверка событий завершена")
@@ -271,15 +265,11 @@ class MarketMonitor:
             self.last_check_time.pop(symbol, None)
             logger.info("Удален символ из мониторинга: %s", symbol)
 
-    def get_monitoring_stats(self) -> Dict[str, Any]:
+    def get_monitoring_stats(self) -> dict[str, Any]:
         """Получить статистику мониторинга."""
         return {
-            'is_running': self.is_running,
-            'symbols_count': len(self.symbols),
-            'monitoring_interval': self.monitoring_interval,
-            'last_check_times': {
-                symbol: time.isoformat()
-                for symbol, time in self.last_check_time.items()
-            }
+            "is_running": self.is_running,
+            "symbols_count": len(self.symbols),
+            "monitoring_interval": self.monitoring_interval,
+            "last_check_times": {symbol: time.isoformat() for symbol, time in self.last_check_time.items()},
         }
-
