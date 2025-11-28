@@ -6,7 +6,7 @@ import json
 import logging
 
 import dash_bootstrap_components as dbc
-from dash import Input, Output, State, callback_context, html
+from dash import Input, Output, State, callback_context, html, ClientsideFunction
 
 logger = logging.getLogger(__name__)
 
@@ -130,6 +130,15 @@ def register_watchlist_callbacks(app, data_manager=None):
         if len(symbols) > 20:
             symbols = symbols[:20]  # Максимум 20 монет для производительности
         return create_watchlist_items(symbols, data_manager)
+
+    app.clientside_callback(
+        ClientsideFunction(namespace="clientside", function_name="toggleWatchlistModal"),
+        Output("add-watchlist-modal", "is_open"),
+        [Input("add-watchlist-btn", "n_clicks"), Input("close-watchlist-modal", "n_clicks")],
+        [State("add-watchlist-modal", "is_open")],
+        allow_duplicate=True,
+        prevent_initial_call=True,
+    )
 
     @app.callback(
         Output("watchlist-symbol-input", "value"),
