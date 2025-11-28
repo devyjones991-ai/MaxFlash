@@ -1,12 +1,15 @@
-"""
-Telegram бот для доставки сигналов и управления подписками.
-"""
-
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
-from typing import Optional, List
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, ReplyKeyboardRemove
+from telegram.ext import (
+    Application,
+    CommandHandler,
+    CallbackQueryHandler,
+    MessageHandler,
+    filters,
+    ContextTypes,
+    ConversationHandler,
+)
+from typing import Optional
 import structlog
-from datetime import datetime
 
 from app.config import settings
 from app.database import AsyncSession
@@ -14,10 +17,12 @@ from app.models.user import User, UserRole, Subscription, SubscriptionStatus
 from app.models.signal import Signal, SignalRating
 from app.repositories.signal_repository import SignalRepository
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 from services.llm_engine import llm_engine
 
 logger = structlog.get_logger()
+
+# Состояния диалога
+MENU, ANALYZE_WAITING = range(2)
 
 
 class TelegramBot:
@@ -35,125 +40,152 @@ class TelegramBot:
 
     def _setup_handlers(self):
         """Настроить обработчики команд."""
-        self.application.add_handler(CommandHandler("start", self.start_command))
-        self.application.add_handler(CommandHandler("help", self.help_command))
-        self.application.add_handler(CommandHandler("signals", self.signals_command))
-        self.application.add_handler(CommandHandler("subscribe", self.subscribe_command))
-        self.application.add_handler(CommandHandler("status", self.status_command))
-        self.application.add_handler(CommandHandler("analyze", self.analyze_command))
+        # Основной диалог
+        conv_handler = ConversationHandler(
+            entry_points=[CommandHandler("start", self.start_command)],
+            states={
+                MENU: [
+                    MessageHandler(filters.Regex("^(📊 Сигналы)$"), self.signals_command),
+                    MessageHandler(filters.Regex("^(🤖 Анализ рынка)$"), self.analyze_start),
+                    MessageHandler(filters.Regex("^(👤 Мой статус)$"), self.status_command),
+                    MessageHandler(filters.Regex("^(❓ Помощь)$"), self.help_command),
+                ],
+                ANALYZE_WAITING: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.analyze_process)],
+            },
+            fallbacks=[CommandHandler("start", self.start_command)],
+        )
+
+        self.application.add_handler(conv_handler)
         self.application.add_handler(CallbackQueryHandler(self.button_callback))
+        # Fallback для неизвестных команд вне диалога
+        self.application.add_handler(MessageHandler(filters.COMMAND, self.unknown_command))
 
-    async def start_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Обработчик команды /start."""
+    async def start_command(self, update: Update, _context: ContextTypes.DEFAULT_TYPE):
+        """Обработчик команды /start и главное меню."""
+        if not update.effective_user:
+            return MENU
+
         user = update.effective_user
-
-        # Регистрируем или обновляем пользователя
         await self._get_or_create_user(user.id, user.username)
 
-        welcome_text = (
-            f"Привет, {user.first_name}! 👋\n\n"
-            "Я MaxFlash Trading Bot - твой помощник в криптотрейдинге.\n\n"
-            "Доступные команды:\n"
-            "/signals - получить торговые сигналы\n"
-            "/subscribe - подписаться на платные сигналы\n"
-            "/status - статус подписки\n"
-            "/help - помощь\n\n"
-            "Начни с команды /signals чтобы увидеть бесплатные сигналы!"
-        )
+        keyboard = [
+            ["📊 Сигналы", "🤖 Анализ рынка"],
+            ["👤 Мой статус", "❓ Помощь"],
+        ]
+        reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
 
-        await update.message.reply_text(welcome_text)
+        if update.message:
+            await update.message.reply_text(
+                f"Привет, {user.first_name}! 👋\nВыберите действие в меню:",
+                reply_markup=reply_markup,
+            )
+        return MENU
 
-    async def help_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Обработчик команды /help."""
+    async def help_command(self, update: Update, _context: ContextTypes.DEFAULT_TYPE):
+        """Обработчик кнопки Помощь."""
         help_text = (
-            "📚 Помощь по боту MaxFlash\n\n"
-            "Команды:\n"
-            "• /start - начать работу с ботом\n"
-            "• /signals - получить торговые сигналы\n"
-            "• /subscribe - подписаться на Pro/Alpha сигналы\n"
-            "• /status - проверить статус подписки\n"
-            "• /help - показать эту справку\n\n"
-            "Рейтинги сигналов:\n"
-            "• FREE - бесплатные сигналы (базовый уровень)\n"
-            "• PRO - платные сигналы (высокое качество)\n"
-            "• ALPHA - премиум сигналы (максимальный потенциал)\n\n"
-            "Для вопросов: @MaxFlashSupport"
+            "📚 **Помощь по боту MaxFlash**\n\n"
+            "🤖 **Анализ рынка**: Нажмите кнопку, введите пару (например BTC/USDT), и AI проведет анализ.\n"
+            "📊 **Сигналы**: Показывает последние активные сигналы.\n"
+            "👤 **Статус**: Ваша подписка и роль.\n\n"
+            "Рейтинги:\n"
+            "• FREE - базовые сигналы\n"
+            "• PRO - качественные сигналы\n"
+            "• ALPHA - премиум сигналы\n\n"
+            "Поддержка: @MaxFlashSupport"
         )
+        if update.message:
+            await update.message.reply_text(help_text, parse_mode="Markdown")
+        return MENU
 
-        await update.message.reply_text(help_text)
+    async def signals_command(self, update: Update, _context: ContextTypes.DEFAULT_TYPE):
+        """Обработчик кнопки Сигналы."""
+        if not update.effective_user:
+            return MENU
 
-    async def signals_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Обработчик команды /signals."""
         user_id = update.effective_user.id
-
-        # Получаем пользователя
         user = await self._get_user(user_id)
+
         if not user:
-            await update.message.reply_text("Ошибка: пользователь не найден. Используйте /start")
-            return
+            if update.message:
+                await update.message.reply_text("Пользователь не найден. Нажмите /start")
+            return MENU
 
-        # Определяем доступные рейтинги
         allowed_ratings = self._get_allowed_ratings(user.role)
-
-        # Получаем сигналы
         signal_repo = SignalRepository(self.db)
         signals = await signal_repo.get_active_signals(limit=10)
-
-        # Фильтруем по доступным рейтингам
         filtered_signals = [s for s in signals if s.rating in allowed_ratings]
 
         if not filtered_signals:
-            text = "📊 Активных сигналов нет.\n\nПопробуйте позже или подпишитесь на платные сигналы: /subscribe"
-            await update.message.reply_text(text)
-            return
+            if update.message:
+                await update.message.reply_text("📊 Активных сигналов нет.")
+            return MENU
 
-        # Отправляем сигналы
-        for signal in filtered_signals[:5]:  # Максимум 5 сигналов
-            signal_text = self._format_signal(signal, user.role)
-            await update.message.reply_text(signal_text, parse_mode="HTML")
+        for signal in filtered_signals[:5]:
+            signal_text = self._format_signal(signal)
+            if update.message:
+                await update.message.reply_text(signal_text, parse_mode="HTML")
 
-        if len(filtered_signals) > 5:
+        if len(filtered_signals) > 5 and update.message:
+            await update.message.reply_text("Показано 5 сигналов. Подпишитесь для большего.")
+
+        return MENU
+
+    async def analyze_start(self, update: Update, _context: ContextTypes.DEFAULT_TYPE):
+        """Начало анализа: запрос символа."""
+        if update.message:
             await update.message.reply_text(
-                f"Показано 5 из {len(filtered_signals)} сигналов. Подпишитесь на Pro/Alpha для большего: /subscribe"
+                "Введите торговую пару для анализа (например: BTC/USDT):", reply_markup=ReplyKeyboardRemove()
             )
+        return ANALYZE_WAITING
 
-    async def subscribe_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Обработчик команды /subscribe."""
-        user_id = update.effective_user.id
-        user = await self._get_user(user_id)
+    async def analyze_process(self, update: Update, _context: ContextTypes.DEFAULT_TYPE):
+        """Обработка ввода символа и запуск анализа."""
+        if not update.message or not update.message.text:
+            return ANALYZE_WAITING
 
-        if not user:
-            await update.message.reply_text("Ошибка: пользователь не найден. Используйте /start")
-            return
+        symbol = update.message.text.upper().strip()
 
+        # Простая валидация
+        if len(symbol) < 3 or len(symbol) > 10:
+            if update.message:
+                await update.message.reply_text(
+                    "❌ Некорректный формат. Попробуйте снова (например: ETH/USDT) или /start для выхода."
+                )
+            return ANALYZE_WAITING
+
+        if update.message:
+            await update.message.reply_text(f"🤖 Анализирую рынок для {symbol}...\nЭто может занять несколько секунд.")
+
+        try:
+            analysis = await llm_engine.analyze_market(symbol)
+            if update.message:
+                await update.message.reply_text(analysis, parse_mode="Markdown")
+        except Exception as e:
+            logger.error(f"Error analyzing {symbol}: {e}")
+            if update.message:
+                await update.message.reply_text("❌ Ошибка анализа. Попробуйте позже.")
+
+        # Возвращаем меню
         keyboard = [
-            [
-                InlineKeyboardButton("Pro ($29/мес)", callback_data="subscribe_pro"),
-                InlineKeyboardButton("Alpha ($99/мес)", callback_data="subscribe_alpha"),
-            ],
-            [InlineKeyboardButton("Отмена", callback_data="cancel")],
+            ["📊 Сигналы", "🤖 Анализ рынка"],
+            ["👤 Мой статус", "❓ Помощь"],
         ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
+        reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+        if update.message:
+            await update.message.reply_text("Готово! Что дальше?", reply_markup=reply_markup)
+        return MENU
 
-        text = (
-            "💳 Выберите подписку:\n\n"
-            "• <b>Pro</b> - платные сигналы высокого качества\n"
-            "  Цена: $29/месяц\n\n"
-            "• <b>Alpha</b> - премиум сигналы максимального потенциала\n"
-            "  Цена: $99/месяц\n\n"
-            "Текущая роль: " + user.role.value
-        )
+    async def status_command(self, update: Update, _context: ContextTypes.DEFAULT_TYPE):
+        """Обработчик кнопки Статус."""
+        if not update.effective_user:
+            return MENU
 
-        await update.message.reply_text(text, reply_markup=reply_markup, parse_mode="HTML")
-
-    async def status_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Обработчик команды /status."""
         user_id = update.effective_user.id
         user = await self._get_user(user_id)
 
         if not user:
-            await update.message.reply_text("Ошибка: пользователь не найден. Используйте /start")
-            return
+            return MENU
 
         # Получаем активные подписки
         result = await self.db.execute(
@@ -163,157 +195,95 @@ class TelegramBot:
         )
         subscriptions = result.scalars().all()
 
-        text = f"👤 Ваш статус:\n\nРоль: {user.role.value}\n\n"
+        text = f"👤 **Ваш профиль**\n\nРоль: {user.role.value}\n"
 
         if subscriptions:
             text += "Активные подписки:\n"
             for sub in subscriptions:
                 expires_at = sub.expires_at.strftime("%d.%m.%Y %H:%M")
                 text += f"• {sub.rating.value.upper()} до {expires_at}\n"
-        else:
-            text += "Нет активных подписок.\nПодпишитесь: /subscribe"
 
-        await update.message.reply_text(text)
+        keyboard = [
+            [
+                InlineKeyboardButton("Pro ($29)", callback_data="subscribe_pro"),
+                InlineKeyboardButton("Alpha ($99)", callback_data="subscribe_alpha"),
+            ]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        if update.message:
+            await update.message.reply_text(text, reply_markup=reply_markup, parse_mode="Markdown")
+        return MENU
 
-    async def analyze_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Обработчик команды /analyze."""
-        if not context.args:
-            await update.message.reply_text("⚠️ Пожалуйста, укажите символ. Пример: /analyze BTC/USDT")
+    async def button_callback(self, update: Update, _context: ContextTypes.DEFAULT_TYPE):
+        """Обработчик инлайн кнопок (подписка)."""
+        if not update.callback_query:
             return
 
-        symbol = context.args[0].upper()
-        await update.message.reply_text(f"🤖 Анализирую рынок для {symbol}...")
-
-        try:
-            # Используем LLM для анализа
-            analysis = await llm_engine.analyze_market(symbol)
-            await update.message.reply_text(analysis, parse_mode="Markdown")
-        except Exception as e:
-            logger.error(f"Error analyzing {symbol}: {e}")
-            await update.message.reply_text("❌ Произошла ошибка при анализе. Попробуйте позже.")
-
-    async def button_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Обработчик нажатий на кнопки."""
         query = update.callback_query
         await query.answer()
 
-        if query.data == "cancel":
-            await query.edit_message_text("Отменено.")
-            return
-
-        if query.data.startswith("subscribe_"):
+        if query.data and query.data.startswith("subscribe_"):
             rating = query.data.replace("subscribe_", "")
-            await query.edit_message_text(
-                f"Подписка {rating} - функция в разработке. Свяжитесь с поддержкой: @MaxFlashSupport"
-            )
+            await query.edit_message_text(f"Подписка {rating} в разработке. Пишите @MaxFlashSupport")
 
-    def _format_signal(self, signal: Signal, user_role: UserRole) -> str:
+    async def unknown_command(self, update: Update, _context: ContextTypes.DEFAULT_TYPE):
+        if update.message:
+            await update.message.reply_text("Неизвестная команда. Введите /start для меню.")
+
+    def _format_signal(self, signal: Signal) -> str:
         """Форматировать сигнал для отправки."""
         rating_emoji = {
             SignalRating.FREE: "🆓",
             SignalRating.PRO: "⭐",
             SignalRating.ALPHA: "💎",
         }
-
-        type_emoji = {
-            "long": "📈",
-            "short": "📉",
-        }
-
         emoji = rating_emoji.get(signal.rating, "📊")
-        type_emoji_str = type_emoji.get(signal.signal_type.value, "📊")
 
-        text = (
-            f"{emoji} <b>{signal.symbol} {signal.signal_type.value.upper()}</b> "
-            f"({signal.rating.value.upper()})\n\n"
-            f"Вход: ${signal.entry_price:.8f}\n"
-        )
-
+        text = f"{emoji} <b>{signal.symbol} {signal.signal_type.value.upper()}</b>\nВход: ${signal.entry_price:.8f}\n"
         if signal.stop_loss:
-            text += f"Stop Loss: ${signal.stop_loss:.8f}\n"
+            text += f"SL: ${signal.stop_loss:.8f}\n"
         if signal.take_profit:
-            text += f"Take Profit: ${signal.take_profit:.8f}\n"
-
-        text += f"\nScore: {float(signal.signal_score):.2%}\n"
-
-        if signal.description:
-            text += f"\n{signal.description}"
-
-        # Для Pro/Alpha показываем полное описание
-        if user_role in [UserRole.PRO, UserRole.ALPHA] and signal.full_description:
-            text += f"\n\n{signal.full_description}"
+            text += f"TP: ${signal.take_profit:.8f}\n"
 
         return text
 
-    def _get_allowed_ratings(self, user_role: UserRole) -> List[SignalRating]:
-        """Получить список разрешённых рейтингов для роли."""
+    def _get_allowed_ratings(self, user_role: UserRole) -> list[SignalRating]:
         if user_role == UserRole.ALPHA:
             return [SignalRating.FREE, SignalRating.PRO, SignalRating.ALPHA]
         elif user_role == UserRole.PRO:
             return [SignalRating.FREE, SignalRating.PRO]
-        else:
-            return [SignalRating.FREE]
+        return [SignalRating.FREE]
 
     async def _get_or_create_user(self, telegram_id: int, username: Optional[str]) -> User:
-        """Получить или создать пользователя."""
         result = await self.db.execute(select(User).where(User.telegram_id == str(telegram_id)))
         user = result.scalar_one_or_none()
-
         if not user:
-            user = User(
-                telegram_id=str(telegram_id),
-                telegram_username=username,
-                role=UserRole.FREE,
-            )
+            user = User(telegram_id=str(telegram_id), telegram_username=username, role=UserRole.FREE)
             self.db.add(user)
             await self.db.commit()
             await self.db.refresh(user)
-            logger.info("User created", telegram_id=telegram_id)
-        else:
-            # Обновляем username если изменился
-            if user.telegram_username != username:
-                user.telegram_username = username
-                await self.db.commit()
-
         return user
 
     async def _get_user(self, telegram_id: int) -> Optional[User]:
-        """Получить пользователя."""
         result = await self.db.execute(select(User).where(User.telegram_id == str(telegram_id)))
         return result.scalar_one_or_none()
 
     async def send_signal(self, signal: Signal, user: User):
-        """Отправить сигнал пользователю."""
-        if not self.token:
+        if not self.token or not user.notifications_enabled:
             return
-
-        # Проверяем доступ
-        allowed_ratings = self._get_allowed_ratings(user.role)
-        if signal.rating not in allowed_ratings:
-            return
-
-        if not user.notifications_enabled:
-            return
-
         try:
-            signal_text = self._format_signal(signal, user.role)
-            await self.application.bot.send_message(chat_id=user.telegram_id, text=signal_text, parse_mode="HTML")
-
-            logger.info("Signal sent", signal_id=signal.id, user_id=user.id)
+            text = self._format_signal(signal)
+            await self.application.bot.send_message(chat_id=user.telegram_id, text=text, parse_mode="HTML")
         except Exception as e:
-            logger.error("Error sending signal", signal_id=signal.id, error=str(e))
+            logger.error(f"Error sending signal: {e}")
 
     def start(self):
-        """Запустить бота."""
         if not self.token:
-            logger.warning("Telegram bot token not configured, skipping bot start")
             return
-
         logger.info("Starting Telegram bot")
         self.application.run_polling(allowed_updates=Update.ALL_TYPES)
 
     async def stop(self):
-        """Остановить бота."""
         if self.application:
             await self.application.stop()
             await self.application.shutdown()

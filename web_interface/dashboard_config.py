@@ -1,31 +1,31 @@
 """
 Конфигурация для web интерфейса.
+Перенаправляет на app.config.settings
 """
 
-import os
-from pathlib import Path
+from app.config import settings
 
 # Путь к проекту
-PROJECT_ROOT = Path(__file__).parent.parent
+PROJECT_ROOT = settings.BASE_DIR
 
 # Freqtrade API настройки
-FREQTRADE_API_URL = os.getenv("FREQTRADE_API_URL", "http://localhost:8080")
-FREQTRADE_API_USERNAME = os.getenv("FREQTRADE_API_USERNAME", None)
-FREQTRADE_API_PASSWORD = os.getenv("FREQTRADE_API_PASSWORD", None)
+FREQTRADE_API_URL = settings.FREQTRADE_API_URL
+FREQTRADE_API_USERNAME = settings.FREQTRADE_API_USERNAME
+FREQTRADE_API_PASSWORD = settings.FREQTRADE_API_PASSWORD
 
 # Dashboard настройки
-DASHBOARD_HOST = os.getenv("DASHBOARD_HOST", "0.0.0.0")
-DASHBOARD_PORT = int(os.getenv("DASHBOARD_PORT", "8050"))
-DASHBOARD_DEBUG = os.getenv("DASHBOARD_DEBUG", "True").lower() == "true"
+DASHBOARD_HOST = settings.DASHBOARD_HOST
+DASHBOARD_PORT = settings.DASHBOARD_PORT
+DASHBOARD_DEBUG = settings.DASHBOARD_DEBUG
 
 # Интервал обновления (миллисекунды)
-UPDATE_INTERVAL = int(os.getenv("UPDATE_INTERVAL", "15000"))  # 15 секунд
+UPDATE_INTERVAL = settings.UPDATE_INTERVAL
 
 # Пути к данным
-DATA_DIR = PROJECT_ROOT / "data"
-LOGS_DIR = PROJECT_ROOT / "logs"
+DATA_DIR = settings.DATA_DIR
+LOGS_DIR = settings.BASE_DIR / "logs"
 BACKTEST_RESULTS_DIR = DATA_DIR / "backtest_results"
 
 # Логирование
-LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
-LOG_FILE = LOGS_DIR / "dashboard.log"
+LOG_LEVEL = settings.LOG_LEVEL
+LOG_FILE = settings.LOG_FILE

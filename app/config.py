@@ -86,6 +86,17 @@ class Settings(BaseSettings):
     OLLAMA_BASE_URL: str = "http://localhost:11434"
     LLM_MODEL_NAME: str = "qwen2.5:7b"
 
+    # Dashboard Settings
+    DASHBOARD_HOST: str = "0.0.0.0"
+    DASHBOARD_PORT: int = 8050
+    DASHBOARD_DEBUG: bool = True
+    UPDATE_INTERVAL: int = 15000  # ms
+
+    # Freqtrade API
+    FREQTRADE_API_URL: str = "http://localhost:8080"
+    FREQTRADE_API_USERNAME: Optional[str] = None
+    FREQTRADE_API_PASSWORD: Optional[str] = None
+
     class Config:
         env_file = ".env"
         case_sensitive = True
