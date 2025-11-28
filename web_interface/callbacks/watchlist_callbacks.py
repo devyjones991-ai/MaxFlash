@@ -57,26 +57,6 @@ def register_watchlist_callbacks(app, data_manager=None):
         prevent_initial_call=True,
     )
 
-    # Клиентский callback для загрузки из localStorage при старте
-    app.clientside_callback(
-        """
-        function(n_clicks) {
-            const saved = localStorage.getItem('maxflash_watchlist');
-            if (saved) {
-                try {
-                    return {symbols: JSON.parse(saved)};
-                } catch(e) {
-                    return {symbols: ['BTC/USDT', 'ETH/USDT']};
-                }
-            }
-            return {symbols: ['BTC/USDT', 'ETH/USDT']};
-        }
-        """,
-        Output("watchlist-store", "data", allow_duplicate=True),
-        Input("watchlist-interval", "n_intervals"),
-        prevent_initial_call=False,
-    )
-
     @app.callback(
         Output("watchlist-store", "data", allow_duplicate=True),
         [Input("watchlist-add-btn", "n_clicks"), Input({"type": "watchlist-remove", "symbol": "*"}, "n_clicks")],
