@@ -223,27 +223,13 @@ def run_telegram_bot():
     """Запуск Telegram бота."""
     try:
         print_status("Запуск Telegram бота...", "info")
-        # Assuming the bot can be run via a script or module.
-        # If bots/telegram/bot.py is not executable directly, we might need a runner.
-        # For now, let's try running it as a module if possible, or create a runner.
-        # Since we don't have a direct runner, let's assume we can run a script that imports and runs it.
-        # We'll create a temporary runner or use a command if one exists.
-        # Let's use a simple inline script for now.
-        cmd = [
-            sys.executable,
-            "-c",
-            "import asyncio; from app.database import async_session_factory; from bots.telegram.bot import TelegramBot; "
-            "async def main(): db = async_session_factory(); bot = TelegramBot(db); bot.start(); "
-            "if __name__ == '__main__': asyncio.run(main())",
-        ]
-        # Wait, bot.start() in the existing code uses application.run_polling() which blocks.
-        # So we need to handle the event loop correctly.
-        # Actually, let's just try to run the existing check_telegram_bot.py if it works, or better, create a proper runner.
-        # But for now, let's just log that we are starting it.
-        # Ideally, we should have a `run_bot.py`. Let's assume we will create one.
+        # Запускаем run_bot.py
         subprocess.run([sys.executable, "run_bot.py"], check=True)
+    except subprocess.CalledProcessError as e:
+        print_status(f"Telegram бот завершился с ошибкой (код {e.returncode})", "warn")
+        print_status("Возможно, запущен другой экземпляр бота (Conflict).", "warn")
     except Exception as e:
-        print_status(f"Ошибка Telegram бота: {e}", "error")
+        print_status(f"Ошибка запуска Telegram бота: {e}", "error")
 
 
 def main():
