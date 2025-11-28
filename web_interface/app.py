@@ -898,22 +898,6 @@ if __name__ == "__main__":
             except Exception:
                 pass
 
-    # Запускаем Telegram бота
-    try:
-        from utils.telegram_bot import get_telegram_bot
-
-        telegram_token = "8274253718:AAGa8juUeXf1jXP7BUZ3o_t-fpK-3BADxew"
-        telegram_bot = get_telegram_bot(token=telegram_token, data_manager=data_manager, alerts=alerts)
-
-        if telegram_bot:
-            telegram_bot.start()
-            logger.info("Telegram бот запущен: t.me/MaxFlash_bot")
-
-            # Интегрируем бота с монитором для отправки уведомлений
-            if market_monitor:
-                market_monitor.telegram_bot = telegram_bot
-        else:
-            logger.warning("Не удалось создать Telegram бота")
     except Exception as e:
         logger.warning("Не удалось запустить Telegram бота: %s", str(e))
 
