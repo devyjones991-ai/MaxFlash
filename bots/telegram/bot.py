@@ -4,7 +4,7 @@ Telegram бот для доставки сигналов и управления
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
-from typing import Optional
+from typing import Optional, List
 import structlog
 from datetime import datetime
 
