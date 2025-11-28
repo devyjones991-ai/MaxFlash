@@ -127,6 +127,16 @@ app = dash.Dash(
     meta_tags=[{"name": "viewport", "content": "width=device-width, initial-scale=1"}],
 )
 
+# Basic Auth
+try:
+    import dash_auth
+
+    VALID_USERNAME_PASSWORD_PAIRS = {os.getenv("DASH_USER", "admin"): os.getenv("DASH_PASS", "admin")}
+
+    auth = dash_auth.BasicAuth(app, VALID_USERNAME_PASSWORD_PAIRS)
+except ImportError:
+    pass
+
 app.title = "MaxFlash - Торговая Система"
 
 # Инициализация Freqtrade клиента (если доступен)

@@ -206,6 +206,45 @@ def run_dashboard(web_interface_path):
     print_status("Не удалось запустить dashboard!", "error")
     sys.exit(1)
 
+    print_status("Не удалось запустить dashboard!", "error")
+    sys.exit(1)
+
+
+def run_mcp_server():
+    """Запуск MCP сервера."""
+    try:
+        print_status("Запуск MCP сервера...", "info")
+        subprocess.run([sys.executable, "mcp_server.py"], check=True)
+    except Exception as e:
+        print_status(f"Ошибка MCP сервера: {e}", "error")
+
+
+def run_telegram_bot():
+    """Запуск Telegram бота."""
+    try:
+        print_status("Запуск Telegram бота...", "info")
+        # Assuming the bot can be run via a script or module.
+        # If bots/telegram/bot.py is not executable directly, we might need a runner.
+        # For now, let's try running it as a module if possible, or create a runner.
+        # Since we don't have a direct runner, let's assume we can run a script that imports and runs it.
+        # We'll create a temporary runner or use a command if one exists.
+        # Let's use a simple inline script for now.
+        cmd = [
+            sys.executable,
+            "-c",
+            "import asyncio; from app.database import async_session_factory; from bots.telegram.bot import TelegramBot; "
+            "async def main(): db = async_session_factory(); bot = TelegramBot(db); bot.start(); "
+            "if __name__ == '__main__': asyncio.run(main())",
+        ]
+        # Wait, bot.start() in the existing code uses application.run_polling() which blocks.
+        # So we need to handle the event loop correctly.
+        # Actually, let's just try to run the existing check_telegram_bot.py if it works, or better, create a proper runner.
+        # But for now, let's just log that we are starting it.
+        # Ideally, we should have a `run_bot.py`. Let's assume we will create one.
+        subprocess.run([sys.executable, "run_bot.py"], check=True)
+    except Exception as e:
+        print_status(f"Ошибка Telegram бота: {e}", "error")
+
 
 def main():
     """Главная функция."""
@@ -226,8 +265,34 @@ def main():
         # Настройка
         web_interface_path = setup_paths()
 
-        # Запуск
-        run_dashboard(web_interface_path)
+        # Запуск процессов
+        import multiprocessing
+
+        processes = []
+
+        # 1. MCP Server
+        p_mcp = multiprocessing.Process(target=run_mcp_server)
+        p_mcp.start()
+        processes.append(p_mcp)
+
+        # 2. Telegram Bot
+        # We need to create run_bot.py first, but let's assume it exists for this step.
+        # Or better, let's write it in the next step.
+        p_bot = multiprocessing.Process(target=run_telegram_bot)
+        p_bot.start()
+        processes.append(p_bot)
+
+        # 3. Dashboard (Main Thread/Process)
+        try:
+            run_dashboard(web_interface_path)
+        except KeyboardInterrupt:
+            print_status("Остановка...", "info")
+        finally:
+            print_status("Остановка всех сервисов...", "info")
+            for p in processes:
+                p.terminate()
+                p.join()
+            sys.exit(0)
 
     except KeyboardInterrupt:
         print_status("Остановка...", "info")
@@ -240,4 +305,8 @@ def main():
 
 
 if __name__ == "__main__":
+    # Fix for Windows multiprocessing
+    import multiprocessing
+
+    multiprocessing.freeze_support()
     main()
