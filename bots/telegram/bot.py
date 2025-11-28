@@ -175,6 +175,23 @@ class TelegramBot:
 
         await update.message.reply_text(text)
 
+    async def analyze_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Обработчик команды /analyze."""
+        if not context.args:
+            await update.message.reply_text("⚠️ Пожалуйста, укажите символ. Пример: /analyze BTC/USDT")
+            return
+
+        symbol = context.args[0].upper()
+        await update.message.reply_text(f"🤖 Анализирую рынок для {symbol}...")
+
+        try:
+            # Используем LLM для анализа
+            analysis = await llm_engine.analyze_market(symbol)
+            await update.message.reply_text(analysis, parse_mode="Markdown")
+        except Exception as e:
+            logger.error(f"Error analyzing {symbol}: {e}")
+            await update.message.reply_text("❌ Произошла ошибка при анализе. Попробуйте позже.")
+
     async def button_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Обработчик нажатий на кнопки."""
         query = update.callback_query
