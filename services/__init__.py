@@ -1,0 +1,4 @@
+"""
+Сервисы MaxFlash Trading System.
+"""
+
