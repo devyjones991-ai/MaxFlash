@@ -17,8 +17,8 @@ class Settings(BaseSettings):
     DEBUG: bool = False
     ENVIRONMENT: str = "development"
 
-    # База данных PostgreSQL
-    DATABASE_URL: str = os.getenv("DATABASE_URL", "postgresql+asyncpg://maxflash:maxflash_dev@localhost:5432/maxflash")
+    # База данных (SQLite по умолчанию для простоты развертывания)
+    DATABASE_URL: str = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./maxflash.db")
     DB_POOL_SIZE: int = 10
     DB_MAX_OVERFLOW: int = 20
 
