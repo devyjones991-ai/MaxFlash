@@ -3,6 +3,12 @@ import os
 import sys
 import asyncio
 import logging
+
+#!/usr/bin/env python3
+import os
+import sys
+import asyncio
+import logging
 from dotenv import load_dotenv
 
 # Load environment variables
@@ -23,6 +29,9 @@ def main():
     """Run the Telegram bot."""
     try:
         logger.info("Starting Telegram Bot (LLM Integrated)...")
+        from app.config import settings
+
+        logger.info(f"Using database: {settings.DATABASE_URL}")
 
         # Create event loop for async operations
         loop = asyncio.new_event_loop()
