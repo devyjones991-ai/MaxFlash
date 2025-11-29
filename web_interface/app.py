@@ -15,6 +15,10 @@ from typing import Any, Optional, Union
 
 import dash
 import dash_bootstrap_components as dbc
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 import plotly.graph_objects as go
 from dash import Input, Output, State, dcc, html
 
