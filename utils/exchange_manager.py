@@ -41,39 +41,25 @@ class ExchangeManager:
         self.cache_ttl = timedelta(minutes=30)
         self.rate_limits: dict[str, float] = {}
 
-        # Популярные биржи для быстрого доступа
-        self.priority_exchanges = ["binance", "okx", "bybit", "gate", "kraken", "bitget", "bingx", "htx", "bitmart"]
+        # Популярные биржи для быстрого доступа и фоллбека
+        self.priority_exchanges = ["binance", "bybit", "okx", "kraken"]
+
+        # Инициализируем основные биржи сразу
+        for ex_id in self.priority_exchanges:
+            self.get_exchange_instance(ex_id)
 
     def get_all_exchanges(self) -> list[str]:
-        """
-        Получить список всех доступных бирж через CCXT.
-
-        Returns:
-            Список идентификаторов бирж
-        """
+        """Получить список всех доступных бирж через CCXT."""
         if not HAS_CCXT:
             return []
-
         try:
-            # Получаем все биржи из CCXT
-            all_exchanges = ccxt.exchanges
-            logger.info("Найдено %s бирж в CCXT", len(all_exchanges))
-            return sorted(all_exchanges)
+            return sorted(ccxt.exchanges)
         except Exception as e:
             logger.error("Ошибка получения списка бирж: %s", str(e))
             return []
 
     def get_exchange_instance(self, exchange_id: str, enable_rate_limit: bool = True) -> Optional[Any]:
-        """
-        Получить экземпляр биржи.
-
-        Args:
-            exchange_id: Идентификатор биржи (например, 'binance')
-            enable_rate_limit: Включить автоматическое управление rate limits
-
-        Returns:
-            Экземпляр биржи или None при ошибке
-        """
+        """Получить экземпляр биржи."""
         if not HAS_CCXT:
             return None
 
@@ -82,7 +68,13 @@ class ExchangeManager:
 
         try:
             exchange_class = getattr(ccxt, exchange_id)
-            exchange = exchange_class({"enableRateLimit": enable_rate_limit, "options": {"defaultType": "spot"}})
+            # Используем настройки для обхода блокировок если нужно
+            config = {
+                "enableRateLimit": enable_rate_limit,
+                "options": {"defaultType": "spot"},
+                "timeout": 10000,  # 10 секунд таймаут
+            }
+            exchange = exchange_class(config)
             self.exchanges[exchange_id] = exchange
             logger.info("Создан экземпляр биржи: %s", exchange_id)
             return exchange
@@ -94,16 +86,7 @@ class ExchangeManager:
             return None
 
     def get_markets(self, exchange_id: str, force_refresh: bool = False) -> dict[str, Any]:
-        """
-        Получить список всех торговых пар для биржи.
-
-        Args:
-            exchange_id: Идентификатор биржи
-            force_refresh: Принудительно обновить кэш
-
-        Returns:
-            Словарь с информацией о торговых парах
-        """
+        """Получить список всех торговых пар для биржи."""
         if not HAS_CCXT:
             return {}
 
@@ -111,7 +94,6 @@ class ExchangeManager:
         if not force_refresh and exchange_id in self.markets_cache and exchange_id in self.markets_cache_time:
             cache_time = self.markets_cache_time[exchange_id]
             if datetime.now() - cache_time < self.cache_ttl:
-                logger.debug("Используем кэш для биржи %s", exchange_id)
                 return self.markets_cache[exchange_id]
 
         exchange = self.get_exchange_instance(exchange_id)
@@ -128,130 +110,91 @@ class ExchangeManager:
             logger.error("Ошибка загрузки рынков для %s: %s", exchange_id, str(e))
             return {}
 
-    def get_all_pairs(self, exchange_id: Optional[str] = None) -> list[str]:
-        """
-        Получить список всех торговых пар.
-
-        Args:
-            exchange_id: Идентификатор биржи (None для всех бирж)
-
-        Returns:
-            Список торговых пар в формате 'BASE/QUOTE'
-        """
-        if not HAS_CCXT:
-            return []
-
-        pairs = set()
-
-        if exchange_id:
-            markets = self.get_markets(exchange_id)
-            pairs.update(markets.keys())
-        else:
-            # Получаем пары со всех приоритетных бирж
-            for ex_id in self.priority_exchanges:
-                markets = self.get_markets(ex_id)
-                pairs.update(markets.keys())
-
-        return sorted(pairs)
-
-    def fetch_ticker(self, symbol: str, exchange_id: str = "binance") -> Optional[dict[str, Any]]:
-        """
-        Получить тикер для торговой пары.
-
-        Args:
-            symbol: Торговая пара (например, 'BTC/USDT')
-            exchange_id: Идентификатор биржи
-
-        Returns:
-            Словарь с данными тикера или None
-        """
-        if not HAS_CCXT:
-            return None
-
-        exchange = self.get_exchange_instance(exchange_id)
-        if not exchange:
-            return None
-
-        try:
-            ticker = exchange.fetch_ticker(symbol)
-            return ticker
-        except Exception as e:
-            logger.warning("Ошибка получения тикера %s с %s: %s", symbol, exchange_id, str(e))
-            return None
-
     def fetch_ohlcv(
         self, symbol: str, timeframe: str = "15m", limit: int = 200, exchange_id: str = "binance"
     ) -> Optional[list[list]]:
         """
-        Получить OHLCV данные для торговой пары.
-
-        Args:
-            symbol: Торговая пара
-            timeframe: Таймфрейм ('15m', '1h', '4h', '1d')
-            limit: Количество свечей
-            exchange_id: Идентификатор биржи
-
-        Returns:
-            Список OHLCV данных или None
+        Получить OHLCV данные с автоматическим фоллбеком.
         """
         if not HAS_CCXT:
             return None
 
-        exchange = self.get_exchange_instance(exchange_id)
-        if not exchange:
+        # Список бирж для попытки: выбранная + остальные приоритетные
+        target_exchanges = [exchange_id] + [ex for ex in self.priority_exchanges if ex != exchange_id]
+
+        for ex_id in target_exchanges:
+            exchange = self.get_exchange_instance(ex_id)
+            if not exchange:
+                continue
+
+            try:
+                # Проверяем поддерживает ли биржа эту пару
+                if not exchange.markets or symbol not in exchange.markets:
+                    self.get_markets(ex_id)  # Загружаем рынки если пусто
+
+                # Если рынки не загрузились, пропускаем
+                if not exchange.markets:
+                    logger.warning(f"Markets not loaded for {ex_id}, skipping.")
+                    continue
+
+                # Если символа нет на этой бирже, пропускаем
+                if symbol not in exchange.markets:
+                    # Попробуем найти похожий символ (например BTC/USDT:USDT для фьючерсов)
+                    continue
+
+                logger.info(f"Запрос OHLCV {symbol} {timeframe} через {ex_id}")
+                ohlcv = exchange.fetch_ohlcv(symbol, timeframe, limit=limit)
+                if ohlcv and len(ohlcv) > 0:
+                    return ohlcv
+
+            except Exception as e:
+                logger.warning(f"Ошибка получения данных с {ex_id}: {e}")
+                continue
+
+        logger.error(f"Не удалось получить данные для {symbol} ни с одной биржи")
+        return None
+
+    def fetch_ticker(self, symbol: str, exchange_id: str = "binance") -> Optional[dict[str, Any]]:
+        """Получить тикер с фоллбеком."""
+        if not HAS_CCXT:
             return None
 
-        try:
-            ohlcv = exchange.fetch_ohlcv(symbol, timeframe, limit=limit)
-            return ohlcv
-        except Exception as e:
-            logger.warning("Ошибка получения OHLCV %s %s с %s: %s", symbol, timeframe, exchange_id, str(e))
-            return None
+        target_exchanges = [exchange_id] + [ex for ex in self.priority_exchanges if ex != exchange_id]
+
+        for ex_id in target_exchanges:
+            exchange = self.get_exchange_instance(ex_id)
+            if not exchange:
+                continue
+
+            try:
+                ticker = exchange.fetch_ticker(symbol)
+                return ticker
+            except Exception as e:
+                logger.warning(f"Ошибка получения тикера с {ex_id}: {e}")
+                continue
+
+        return None
 
     def get_exchange_info(self, exchange_id: str) -> dict[str, Any]:
-        """
-        Получить информацию о бирже.
-
-        Args:
-            exchange_id: Идентификатор биржи
-
-        Returns:
-            Словарь с информацией о бирже
-        """
+        """Получить информацию о бирже."""
         exchange = self.get_exchange_instance(exchange_id)
         if not exchange:
             return {}
-
         try:
-            info = {
+            return {
                 "id": exchange.id,
                 "name": exchange.name,
-                "countries": getattr(exchange, "countries", []),
-                "urls": getattr(exchange, "urls", {}),
-                "version": getattr(exchange, "version", "unknown"),
                 "rateLimit": getattr(exchange, "rateLimit", 0),
                 "has": {
-                    "fetchMarkets": exchange.has.get("fetchMarkets", False),
-                    "fetchTicker": exchange.has.get("fetchTicker", False),
                     "fetchOHLCV": exchange.has.get("fetchOHLCV", False),
+                    "fetchTicker": exchange.has.get("fetchTicker", False),
                 },
             }
-            return info
-        except Exception as e:
-            logger.error("Ошибка получения информации о бирже %s: %s", exchange_id, str(e))
+        except Exception:
             return {}
 
     def clear_cache(self, exchange_id: Optional[str] = None):
-        """
-        Очистить кэш рынков.
-
-        Args:
-            exchange_id: Идентификатор биржи (None для всех)
-        """
         if exchange_id:
             self.markets_cache.pop(exchange_id, None)
-            self.markets_cache_time.pop(exchange_id, None)
         else:
             self.markets_cache.clear()
-            self.markets_cache_time.clear()
-        logger.info("Кэш очищен для %s", exchange_id or "всех бирж")

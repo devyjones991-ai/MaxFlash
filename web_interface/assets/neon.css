@@ -1,0 +1,140 @@
+/* Neon Cyberpunk Theme */
+:root {
+    --neon-green: #00ff41;
+    --neon-pink: #ff00ff;
+    --neon-blue: #00f3ff;
+    --dark-bg: #0a0a0a;
+    --card-bg: #111111;
+    --text-primary: #ffffff;
+    --text-secondary: #b3b3b3;
+}
+
+body {
+    background-color: var(--dark-bg);
+    color: var(--text-primary);
+    font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+    width: 8px;
+}
+::-webkit-scrollbar-track {
+    background: var(--dark-bg);
+}
+::-webkit-scrollbar-thumb {
+    background: #333;
+    border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+    background: var(--neon-blue);
+}
+
+/* Neon Cards */
+.card {
+    background-color: var(--card-bg) !important;
+    border: 1px solid #333;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+    transition: all 0.3s ease;
+}
+
+.card:hover {
+    box-shadow: 0 0 15px rgba(0, 243, 255, 0.2);
+    border-color: var(--neon-blue);
+}
+
+/* Neon Buttons */
+.btn-primary {
+    background-color: transparent !important;
+    border: 1px solid var(--neon-blue) !important;
+    color: var(--neon-blue) !important;
+    box-shadow: 0 0 5px var(--neon-blue);
+    transition: all 0.3s ease;
+}
+
+.btn-primary:hover {
+    background-color: var(--neon-blue) !important;
+    color: #000 !important;
+    box-shadow: 0 0 20px var(--neon-blue);
+}
+
+.btn-success {
+    background-color: transparent !important;
+    border: 1px solid var(--neon-green) !important;
+    color: var(--neon-green) !important;
+    box-shadow: 0 0 5px var(--neon-green);
+}
+
+.btn-success:hover {
+    background-color: var(--neon-green) !important;
+    color: #000 !important;
+    box-shadow: 0 0 20px var(--neon-green);
+}
+
+/* Inputs */
+.form-control, .form-select {
+    background-color: #1a1a1a !important;
+    border: 1px solid #333 !important;
+    color: var(--text-primary) !important;
+}
+
+.form-control:focus, .form-select:focus {
+    border-color: var(--neon-pink) !important;
+    box-shadow: 0 0 10px rgba(255, 0, 255, 0.3) !important;
+}
+
+/* Signal Cards */
+.signal-card {
+    background: linear-gradient(145deg, #1a1a1a, #111);
+    border-left: 4px solid;
+    margin-bottom: 15px;
+    animation: fadeIn 0.5s ease-in-out;
+}
+
+.signal-buy {
+    border-color: var(--neon-green);
+    box-shadow: -2px 0 10px rgba(0, 255, 65, 0.1);
+}
+
+.signal-sell {
+    border-color: var(--neon-pink);
+    box-shadow: -2px 0 10px rgba(255, 0, 255, 0.1);
+}
+
+/* Animations */
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes pulse-green {
+    0% { box-shadow: 0 0 0 0 rgba(0, 255, 65, 0.4); }
+    70% { box-shadow: 0 0 0 10px rgba(0, 255, 65, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(0, 255, 65, 0); }
+}
+
+.live-indicator {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background-color: var(--neon-green);
+    animation: pulse-green 2s infinite;
+    margin-right: 5px;
+}
+
+/* Headers */
+h1, h2, h3, h4, h5 {
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.neon-text-blue {
+    color: var(--neon-blue);
+    text-shadow: 0 0 5px rgba(0, 243, 255, 0.5);
+}
+
+.neon-text-pink {
+    color: var(--neon-pink);
+    text-shadow: 0 0 5px rgba(255, 0, 255, 0.5);
+}

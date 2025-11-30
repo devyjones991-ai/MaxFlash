@@ -10,7 +10,9 @@ from enum import Enum
 from typing import Any, Dict, Optional
 
 from app.config import settings
-from ml.llm_interpreter import LLMInterpreter
+
+# LLM removed for stability - using deterministic reasoning
+# from ml.llm_interpreter import LLMInterpreter
 from ml.signal_filter import SignalFilter
 from trading.risk_manager import AdvancedRiskManager
 from utils.market_data_manager import MarketDataManager
@@ -56,7 +58,8 @@ class SignalService:
         self.risk_manager = AdvancedRiskManager(account_balance=settings.MIN_LIQUIDITY_USD)
         self.data_manager = MarketDataManager()
         self.signal_filter = SignalFilter()
-        self.llm_interpreter = LLMInterpreter()
+        # LLM removed for stability
+        # self.llm_interpreter = LLMInterpreter()
 
         self.ml_model = None
         if HAS_ML:
@@ -119,13 +122,34 @@ class SignalService:
                 stop_loss = current_price + (atr * 1.5)
                 take_profit = current_price - (atr * 3.0)
 
-        # 6. LLM Reasoning (only for strong signals)
+        # 6. Generate Reasoning (Deterministic, no LLM)
         reasoning = []
         if final_signal_type != SignalType.NEUTRAL:
-            llm_reasoning = self.llm_interpreter.interpret_signal(
-                symbol, final_signal_type.value, adjusted_confidence, indicators
-            )
-            reasoning.append(llm_reasoning)
+            # Build reasoning from indicators
+            reasons = []
+
+            # RSI analysis
+            rsi = indicators.get("rsi", 50)
+            if rsi > 70:
+                reasons.append(f"RSI overbought at {rsi:.1f}")
+            elif rsi < 30:
+                reasons.append(f"RSI oversold at {rsi:.1f}")
+            else:
+                reasons.append(f"RSI neutral at {rsi:.1f}")
+
+            # Volume analysis
+            vol_ratio = indicators.get("volume_ratio", 1.0)
+            if vol_ratio > 1.5:
+                reasons.append(f"Strong volume ({vol_ratio:.2f}x average)")
+            elif vol_ratio < 0.5:
+                reasons.append(f"Low volume ({vol_ratio:.2f}x average)")
+
+            # ML confidence
+            reasons.append(f"ML model confidence: {adjusted_confidence * 100:.1f}%")
+
+            # Create reasoning text
+            reasoning_text = f"{final_signal_type.value} signal detected. " + "; ".join(reasons)
+            reasoning.append(reasoning_text)
         else:
             reasoning.append("Signal confidence too low or neutral market conditions.")
 

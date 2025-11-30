@@ -62,63 +62,53 @@ class MarketDataManager:
     ) -> Optional[pd.DataFrame]:
         """
         Получить OHLCV данные для торговой пары.
-
-        Args:
-            symbol: Торговая пара (например, 'BTC/USDT')
-            timeframe: Таймфрейм
-            limit: Количество свечей
-            exchange_id: Идентификатор биржи
-            force_refresh: Принудительно обновить кэш
-
-        Returns:
-            DataFrame с OHLCV данными или None
         """
         global_profiler.start("get_ohlcv")
-        cache_key = self._get_cache_key(symbol, exchange_id, timeframe)
 
-        # Проверяем продвинутый кэш
-        if not force_refresh:
-            cached_df = self.market_cache.get(cache_key, ttl_seconds=int(self.cache_ttl.total_seconds()))
-            if cached_df is not None:
-                logger.debug("Используем MarketCache для %s", cache_key)
+        # Упрощенный кэш ключ
+        cache_key = f"{exchange_id}:{symbol}:{timeframe}"
+
+        # Проверяем локальный кэш (простой TTL)
+        if not force_refresh and cache_key in self.ohlcv_cache:
+            cache_data = self.ohlcv_cache[cache_key]
+            if datetime.now() - cache_data["time"] < self.cache_ttl:
+                # logger.debug(f"Cache hit for {cache_key}")
                 global_profiler.stop("get_ohlcv")
-                return cached_df
+                return cache_data["df"].copy()
 
-        # Проверяем локальный кэш
-        if not force_refresh and cache_key in self.ohlcv_cache and self._is_cache_valid(cache_key):
-            logger.debug("Используем локальный кэш для %s", cache_key)
-            df = self.ohlcv_cache[cache_key]["data"].copy()
-            global_profiler.stop("get_ohlcv")
-            return df
-
-        # Загружаем данные
+        # Загружаем данные через ExchangeManager (который теперь имеет фоллбек)
+        logger.info(f"Fetching {symbol} from {exchange_id}...")
         ohlcv_data = self.exchange_manager.fetch_ohlcv(symbol, timeframe, limit, exchange_id)
 
         if not ohlcv_data:
+            logger.warning(f"Failed to fetch data for {symbol} from {exchange_id}")
             global_profiler.stop("get_ohlcv")
             return None
 
-        # Создаем DataFrame
-        df = pd.DataFrame(ohlcv_data, columns=["timestamp", "open", "high", "low", "close", "volume"])
-        df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms")
-        df.set_index("timestamp", inplace=True)
+        try:
+            # Создаем DataFrame
+            df = pd.DataFrame(ohlcv_data, columns=["timestamp", "open", "high", "low", "close", "volume"])
+            df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms")
+            df.set_index("timestamp", inplace=True)
 
-        # Сохраняем в оба кэша
-        with self.lock:
-            self.ohlcv_cache[cache_key] = {
-                "data": df.copy(),
-                "symbol": symbol,
-                "timeframe": timeframe,
-                "exchange_id": exchange_id,
-            }
-            self.cache_times[cache_key] = datetime.now()
+            # Сортируем и убираем дубликаты
+            df = df.sort_index()
+            df = df[~df.index.duplicated(keep="last")]
 
-        # Сохраняем в MarketCache
-        self.market_cache.set(cache_key, df.copy(), ttl_seconds=int(self.cache_ttl.total_seconds()))
+            # Сохраняем в кэш
+            with self.lock:
+                self.ohlcv_cache[cache_key] = {"df": df.copy(), "time": datetime.now()}
 
-        elapsed = global_profiler.stop("get_ohlcv")
-        logger.info("Загружены данные для %s: %s свечей за %.2f сек", symbol, len(df), elapsed)
-        return df
+            elapsed = global_profiler.stop("get_ohlcv")
+            logger.info(
+                f"Loaded {len(df)} candles for {symbol} from {exchange_id} in {elapsed:.2f}s. Price: {df['close'].iloc[-1]}"
+            )
+            return df
+
+        except Exception as e:
+            logger.error(f"Error processing data for {symbol}: {e}")
+            global_profiler.stop("get_ohlcv")
+            return None
 
     def batch_fetch_ohlcv(
         self,

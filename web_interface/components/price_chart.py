@@ -1,5 +1,5 @@
 """
-Компонент графика цены с Order Blocks, FVG и другими индикаторами.
+TradingView-style chart component with technical indicators.
 """
 
 from typing import Optional
@@ -10,230 +10,248 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
 
+def calculate_indicators(df: pd.DataFrame) -> pd.DataFrame:
+    """Calculate technical indicators for chart."""
+    # Moving Averages
+    df["ma20"] = df["close"].rolling(window=20).mean()
+    df["ma50"] = df["close"].rolling(window=50).mean()
+
+    # Bollinger Bands
+    df["bb_middle"] = df["close"].rolling(window=20).mean()
+    bb_std = df["close"].rolling(window=20).std()
+    df["bb_upper"] = df["bb_middle"] + (bb_std * 2)
+    df["bb_lower"] = df["bb_middle"] - (bb_std * 2)
+
+    # RSI
+    delta = df["close"].diff()
+    gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
+    loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
+    rs = gain / loss
+    df["rsi"] = 100 - (100 / (1 + rs))
+
+    # MACD
+    exp1 = df["close"].ewm(span=12, adjust=False).mean()
+    exp2 = df["close"].ewm(span=26, adjust=False).mean()
+    df["macd"] = exp1 - exp2
+    df["macd_signal"] = df["macd"].ewm(span=9, adjust=False).mean()
+    df["macd_hist"] = df["macd"] - df["macd_signal"]
+
+    return df
+
+
 def create_price_chart_with_indicators(
     dataframe: Optional[pd.DataFrame] = None,
-    show_order_blocks: bool = True,
-    show_fvg: bool = True,
-    show_confluence: bool = True,
+    symbol: str = "BTC/USDT",
 ) -> go.Figure:
-    """
-    Создает график цены с Order Blocks, FVG и другими индикаторами.
+    """Create TradingView-style price chart with indicators."""
 
-    Args:
-        dataframe: DataFrame с OHLCV данными
-        show_order_blocks: Показывать Order Blocks
-        show_fvg: Показывать Fair Value Gaps
-        show_confluence: Показывать Confluence zones
-
-    Returns:
-        Plotly figure
-    """
-    # Генерируем тестовые данные если не предоставлены
-    if dataframe is None:
-        dates = pd.date_range(start="2024-01-01", periods=200, freq="15min")
-        np.random.seed(42)
-        base_price = 50000
-        prices = base_price + np.cumsum(np.random.randn(200) * 100)
-
-        dataframe = pd.DataFrame(
-            {
-                "open": prices * 0.999,
-                "high": prices * 1.002,
-                "low": prices * 0.998,
-                "close": prices,
-                "volume": np.random.uniform(1000000, 5000000, 200),
-            },
-            index=dates,
+    # Generate test data if none provided
+    if dataframe is None or dataframe.empty:
+        # Return empty figure with message
+        fig = go.Figure()
+        fig.add_annotation(
+            text="Waiting for Data...",
+            xref="paper",
+            yref="paper",
+            x=0.5,
+            y=0.5,
+            showarrow=False,
+            font=dict(size=20, color="#00f3ff"),
         )
+        fig.update_layout(
+            template="plotly_dark",
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="rgba(0,0,0,0)",
+            xaxis={"visible": False},
+            yaxis={"visible": False},
+        )
+        return fig
 
-    # Создаем subplots
+    # Calculate indicators
+    df = calculate_indicators(dataframe.copy())
+
+    # Create subplots: Price + Volume + RSI + MACD
     fig = make_subplots(
-        rows=3,
+        rows=4,
         cols=1,
         shared_xaxes=True,
-        vertical_spacing=0.05,
-        subplot_titles=("Price with Order Blocks & FVG", "Volume", "Delta"),
-        row_heights=[0.6, 0.2, 0.2],
-        specs=[[{"secondary_y": False}], [{"secondary_y": False}], [{"secondary_y": False}]],
+        vertical_spacing=0.03,
+        row_heights=[0.5, 0.15, 0.15, 0.2],
+        specs=[
+            [{"secondary_y": False}],
+            [{"secondary_y": False}],
+            [{"secondary_y": False}],
+            [{"secondary_y": False}],
+        ],
     )
 
-    # 1. Candlesticks
+    # Candlestick chart
     fig.add_trace(
         go.Candlestick(
-            x=dataframe.index,
-            open=dataframe["open"],
-            high=dataframe["high"],
-            low=dataframe["low"],
-            close=dataframe["close"],
+            x=df.index,
+            open=df["open"],
+            high=df["high"],
+            low=df["low"],
+            close=df["close"],
             name="Price",
-            increasing_line_color="#26a69a",
-            decreasing_line_color="#ef5350",
+            increasing_line_color="#00ff41",  # Neon Green
+            decreasing_line_color="#ff00ff",  # Neon Pink
+            increasing_fillcolor="rgba(0, 255, 65, 0.1)",
+            decreasing_fillcolor="rgba(255, 0, 255, 0.1)",
         ),
         row=1,
         col=1,
     )
 
-    # Order Blocks (пример - в реальности из детектора)
-    if show_order_blocks:
-        # Bullish Order Block
-        ob_start_idx = 50
-        ob_end_idx = 55
-        dataframe["close"].iloc[ob_start_idx]
-        ob_high = dataframe["high"].iloc[ob_start_idx:ob_end_idx].max()
-        ob_low = dataframe["low"].iloc[ob_start_idx:ob_end_idx].min()
-
-        fig.add_trace(
-            go.Scatter(
-                x=[dataframe.index[ob_start_idx], dataframe.index[ob_end_idx]],
-                y=[ob_low, ob_low],
-                mode="lines",
-                line={"width": 0},
-                fill="tonexty",
-                fillcolor="rgba(0, 255, 0, 0.15)",
-                name="Bullish OB",
-                showlegend=True,
-            ),
-            row=1,
-            col=1,
-        )
-
-        fig.add_trace(
-            go.Scatter(
-                x=[dataframe.index[ob_start_idx], dataframe.index[ob_end_idx]],
-                y=[ob_high, ob_high],
-                mode="lines",
-                line={"width": 2, "color": "green", "dash": "dash"},
-                name="OB High",
-                showlegend=False,
-            ),
-            row=1,
-            col=1,
-        )
-
-        fig.add_trace(
-            go.Scatter(
-                x=[dataframe.index[ob_start_idx], dataframe.index[ob_end_idx]],
-                y=[ob_low, ob_low],
-                mode="lines",
-                line={"width": 2, "color": "green", "dash": "dash"},
-                name="OB Low",
-                showlegend=False,
-            ),
-            row=1,
-            col=1,
-        )
-
-    # Fair Value Gaps (пример)
-    if show_fvg:
-        fvg_idx = 100
-        fvg_high = dataframe["close"].iloc[fvg_idx - 2]
-        fvg_low = dataframe["open"].iloc[fvg_idx]
-
-        fig.add_trace(
-            go.Scatter(
-                x=[dataframe.index[fvg_idx - 2], dataframe.index[fvg_idx]],
-                y=[fvg_low, fvg_low],
-                mode="lines",
-                line={"width": 0},
-                fill="tonexty",
-                fillcolor="rgba(255, 255, 0, 0.1)",
-                name="FVG",
-                showlegend=True,
-            ),
-            row=1,
-            col=1,
-        )
-
-        fig.add_trace(
-            go.Scatter(
-                x=[dataframe.index[fvg_idx - 2], dataframe.index[fvg_idx]],
-                y=[fvg_high, fvg_high],
-                mode="lines",
-                line={"width": 1, "color": "yellow", "dash": "dot"},
-                name="FVG High",
-                showlegend=False,
-            ),
-            row=1,
-            col=1,
-        )
-
-    # Confluence zones (пример)
-    if show_confluence:
-        confluence_price = dataframe["close"].iloc[-1]
-        confluence_range = confluence_price * 0.01  # 1% range
-
-        fig.add_trace(
-            go.Scatter(
-                x=[dataframe.index[-50], dataframe.index[-1]],
-                y=[confluence_price + confluence_range, confluence_price + confluence_range],
-                mode="lines",
-                line={"width": 0},
-                fill="tonexty",
-                fillcolor="rgba(255, 0, 255, 0.1)",
-                name="Confluence Zone",
-                showlegend=True,
-            ),
-            row=1,
-            col=1,
-        )
-
-        fig.add_trace(
-            go.Scatter(
-                x=[dataframe.index[-50], dataframe.index[-1]],
-                y=[confluence_price - confluence_range, confluence_price - confluence_range],
-                mode="lines",
-                line={"width": 1, "color": "magenta", "dash": "dot"},
-                showlegend=False,
-            ),
-            row=1,
-            col=1,
-        )
-
-    # 2. Volume bars
-    colors = ["green" if close > open else "red" for close, open in zip(dataframe["close"], dataframe["open"])]
-
+    # Moving Averages
     fig.add_trace(
-        go.Bar(x=dataframe.index, y=dataframe["volume"], name="Volume", marker_color=colors, marker_opacity=0.6),
-        row=2,
+        go.Scatter(
+            x=df.index,
+            y=df["ma20"],
+            mode="lines",
+            name="MA20",
+            line=dict(color="#00f3ff", width=1.5),  # Neon Blue
+        ),
+        row=1,
         col=1,
-    )
-
-    # 3. Delta (пример)
-    delta_values = np.where(
-        dataframe["close"] > dataframe["open"],
-        dataframe["volume"] * 0.6,  # Buying volume
-        -dataframe["volume"] * 0.4,  # Selling volume
     )
 
     fig.add_trace(
         go.Scatter(
-            x=dataframe.index,
-            y=delta_values,
+            x=df.index,
+            y=df["ma50"],
             mode="lines",
-            name="Delta",
-            line={"color": "cyan", "width": 2},
-            fill="tozeroy",
-            fillcolor="rgba(0, 255, 255, 0.2)",
+            name="MA50",
+            line=dict(color="#ffff00", width=1.5),  # Yellow
+        ),
+        row=1,
+        col=1,
+    )
+
+    # Bollinger Bands
+    fig.add_trace(
+        go.Scatter(
+            x=df.index,
+            y=df["bb_upper"],
+            mode="lines",
+            name="BB Upper",
+            line=dict(color="rgba(0, 243, 255, 0.3)", width=1, dash="dash"),
+            showlegend=False,
+        ),
+        row=1,
+        col=1,
+    )
+
+    fig.add_trace(
+        go.Scatter(
+            x=df.index,
+            y=df["bb_lower"],
+            mode="lines",
+            name="BB Lower",
+            line=dict(color="rgba(0, 243, 255, 0.3)", width=1, dash="dash"),
+            fill="tonexty",
+            fillcolor="rgba(0, 243, 255, 0.05)",
+            showlegend=False,
+        ),
+        row=1,
+        col=1,
+    )
+
+    # Volume bars
+    colors = ["#00ff41" if close > open else "#ff00ff" for close, open in zip(df["close"], df["open"])]
+
+    fig.add_trace(
+        go.Bar(
+            x=df.index,
+            y=df["volume"],
+            name="Volume",
+            marker_color=colors,
+            marker_opacity=0.5,
+            showlegend=False,
+        ),
+        row=2,
+        col=1,
+    )
+
+    # RSI
+    fig.add_trace(
+        go.Scatter(
+            x=df.index,
+            y=df["rsi"],
+            mode="lines",
+            name="RSI",
+            line=dict(color="#bd00ff", width=2),  # Purple
+            showlegend=False,
         ),
         row=3,
         col=1,
     )
 
-    # Обновление layout
+    # RSI overbought/oversold levels
+    fig.add_hline(y=70, line_dash="dash", line_color="#ff00ff", opacity=0.5, row=3, col=1)
+    fig.add_hline(y=30, line_dash="dash", line_color="#00ff41", opacity=0.5, row=3, col=1)
+    fig.add_hline(y=50, line_dash="dot", line_color="gray", opacity=0.3, row=3, col=1)
+
+    # MACD
+    fig.add_trace(
+        go.Scatter(
+            x=df.index,
+            y=df["macd"],
+            mode="lines",
+            name="MACD",
+            line=dict(color="#00f3ff", width=1.5),
+            showlegend=False,
+        ),
+        row=4,
+        col=1,
+    )
+
+    fig.add_trace(
+        go.Scatter(
+            x=df.index,
+            y=df["macd_signal"],
+            mode="lines",
+            name="Signal",
+            line=dict(color="#ff9900", width=1.5),
+            showlegend=False,
+        ),
+        row=4,
+        col=1,
+    )
+
+    # MACD histogram
+    macd_colors = ["#00ff41" if val > 0 else "#ff00ff" for val in df["macd_hist"]]
+    fig.add_trace(
+        go.Bar(
+            x=df.index,
+            y=df["macd_hist"],
+            name="MACD Hist",
+            marker_color=macd_colors,
+            marker_opacity=0.6,
+            showlegend=False,
+        ),
+        row=4,
+        col=1,
+    )
+
+    # Update layout
     fig.update_layout(
         template="plotly_dark",
         height=800,
+        margin=dict(l=50, r=50, t=30, b=30),
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        font=dict(family="Segoe UI", color="#b3b3b3"),
         showlegend=True,
-        legend={"orientation": "h", "yanchor": "bottom", "y": 1.02, "xanchor": "right", "x": 1},
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
         xaxis_rangeslider_visible=False,
         hovermode="x unified",
-        margin={"l": 50, "r": 50, "t": 50, "b": 50},
     )
 
-    # Обновление осей
-    fig.update_xaxes(title_text="Time", row=3, col=1)
-    fig.update_yaxes(title_text="Price (USDT)", row=1, col=1)
-    fig.update_yaxes(title_text="Volume", row=2, col=1)
-    fig.update_yaxes(title_text="Delta", row=3, col=1)
+    # Update axes
+    grid_color = "rgba(128, 128, 128, 0.1)"
+
+    fig.update_xaxes(showgrid=True, gridwidth=1, gridcolor=grid_color)
+    fig.update_yaxes(showgrid=True, gridwidth=1, gridcolor=grid_color)
 
     return fig
