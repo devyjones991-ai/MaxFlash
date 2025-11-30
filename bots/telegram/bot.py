@@ -17,7 +17,7 @@ from app.models.user import User, UserRole, Subscription, SubscriptionStatus
 from app.models.signal import Signal, SignalRating
 from app.repositories.signal_repository import SignalRepository
 from sqlalchemy import select
-from services.llm_engine import llm_engine
+# from services.llm_engine import llm_engine
 
 logger = structlog.get_logger()
 
@@ -158,9 +158,36 @@ class TelegramBot:
             await update.message.reply_text(f"🤖 Анализирую рынок для {symbol}...\nЭто может занять несколько секунд.")
 
         try:
-            analysis = await llm_engine.analyze_market(symbol)
+            from trading.signals_service import signal_service
+
+            # Use SignalService for comprehensive analysis
+            result = await signal_service.analyze_symbol(symbol)
+
+            # Format response
+            emoji = "⚪"
+            if result.signal_type == "BUY":
+                emoji = "🟢"
+            elif result.signal_type == "SELL":
+                emoji = "🔴"
+
+            response = (
+                f"{emoji} **Анализ {result.symbol}**\n\n"
+                f"Сигнал: **{result.signal_type.value}**\n"
+                f"Уверенность: {result.confidence * 100:.1f}%\n"
+                f"Цена: ${result.price:.2f}\n\n"
+            )
+
+            if result.stop_loss:
+                response += f"SL: ${result.stop_loss:.2f}\n"
+            if result.take_profit:
+                response += f"TP: ${result.take_profit:.2f}\n\n"
+
+            if result.reasoning:
+                response += f"📝 **Обоснование**:\n{result.reasoning[0]}\n"
+
             if update.message:
-                await update.message.reply_text(analysis, parse_mode="Markdown")
+                await update.message.reply_text(response, parse_mode="Markdown")
+
         except Exception as e:
             logger.error(f"Error analyzing {symbol}: {e}")
             if update.message:

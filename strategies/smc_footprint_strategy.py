@@ -40,6 +40,9 @@ from utils.risk_manager import RiskManager
 logger = logging.getLogger(__name__)
 
 
+from app.config import settings
+
+
 class SMCFootprintStrategy(BaseStrategy):
     """
     Integrated trading strategy combining:
@@ -59,7 +62,8 @@ class SMCFootprintStrategy(BaseStrategy):
     startup_candle_count: int = 500
 
     # Strategy parameters
-    risk_per_trade = 0.01  # 1% risk per trade
+    risk_params = settings.get_risk_params()
+    risk_per_trade = risk_params.get("max_risk_per_trade", 0.01)
     min_confluence_signals = 3
 
     # Order Block parameters

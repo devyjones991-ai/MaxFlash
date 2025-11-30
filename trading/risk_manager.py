@@ -3,11 +3,11 @@ Advanced risk management for trading operations.
 Implements position sizing, portfolio risk limits, and trade validation.
 """
 
-import numpy as np
-from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional
 from dataclasses import dataclass
+from datetime import datetime
+from typing import Any, Optional
 
+from app.config import settings
 from utils.logger_config import setup_logging
 
 logger = setup_logging()
@@ -36,10 +36,10 @@ class AdvancedRiskManager:
     def __init__(
         self,
         account_balance: float,
-        max_risk_per_trade: float = 0.01,  # 1%
-        max_portfolio_risk: float = 0.05,  # 5%
-        max_correlated_exposure: float = 0.10,  # 10%
-        daily_loss_limit: float = 0.02,  # 2%
+        max_risk_per_trade: Optional[float] = None,
+        max_portfolio_risk: Optional[float] = None,
+        max_correlated_exposure: Optional[float] = None,
+        daily_loss_limit: Optional[float] = None,
         max_positions: int = 10,
     ):
         """
@@ -53,15 +53,19 @@ class AdvancedRiskManager:
             daily_loss_limit: Maximum daily loss before halting (as fraction)
             max_positions: Maximum number of concurrent positions
         """
+        risk_params = settings.get_risk_params()
+
         self.account_balance = account_balance
-        self.max_risk_per_trade = max_risk_per_trade
-        self.max_portfolio_risk = max_portfolio_risk
-        self.max_correlated_exposure = max_correlated_exposure
-        self.daily_loss_limit = daily_loss_limit
+        self.max_risk_per_trade = max_risk_per_trade or risk_params.get("max_risk_per_trade", 0.01)
+        self.max_portfolio_risk = max_portfolio_risk or 0.05  # 5% default
+        self.max_correlated_exposure = max_correlated_exposure or 0.10  # 10% default
+        self.daily_loss_limit = daily_loss_limit or (
+            settings.MAX_DAILY_LOSS_USD / account_balance if account_balance > 0 else 0.02
+        )
         self.max_positions = max_positions
 
         # Tracking
-        self.current_positions: List[PositionInfo] = []
+        self.current_positions: list[PositionInfo] = []
         self.daily_pnl = 0.0
         self.last_reset_date = datetime.now().date()
         self.total_trades = 0
@@ -69,7 +73,7 @@ class AdvancedRiskManager:
 
         logger.info(
             f"RiskManager initialized: balance=${account_balance:,.2f}, "
-            f"max_risk={max_risk_per_trade * 100}%, daily_limit={daily_loss_limit * 100}%"
+            f"max_risk={self.max_risk_per_trade * 100}%, daily_limit={self.daily_loss_limit * 100}%"
         )
 
     def calculate_position_size(
@@ -325,7 +329,7 @@ class AdvancedRiskManager:
                 else:
                     position.unrealized_pnl = (position.entry_price - current_price) * position.amount
 
-    def get_portfolio_stats(self) -> Dict[str, Any]:
+    def get_portfolio_stats(self) -> dict[str, Any]:
         """Get current portfolio statistics."""
         total_value = sum(pos.amount * pos.entry_price for pos in self.current_positions)
         total_unrealized_pnl = sum(pos.unrealized_pnl for pos in self.current_positions)
