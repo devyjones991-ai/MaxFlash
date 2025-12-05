@@ -480,3 +480,4 @@ def get_lightgbm_generator() -> LightGBMSignalGenerator:
             raise
     return _lightgbm_generator
 
+

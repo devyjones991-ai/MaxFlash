@@ -4,3 +4,4 @@ ssh -o StrictHostKeyChecking=no devyjones@192.168.0.204 "cd ~/MaxFlash && git pu
 echo Deploy complete!
 pause
 
+

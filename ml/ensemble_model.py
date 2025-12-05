@@ -36,6 +36,12 @@ except ImportError:
     HAS_LIGHTGBM = False
     LightGBMSignalGenerator = None
 
+try:
+    import tensorflow as tf
+    HAS_TENSORFLOW = True
+except ImportError:
+    HAS_TENSORFLOW = False
+
 
 class EnsembleSignalGenerator:
     """
@@ -67,9 +73,17 @@ class EnsembleSignalGenerator:
         if not HAS_SKLEARN:
             raise ImportError("scikit-learn is required for EnsembleSignalGenerator")
 
-        # LSTM component
-        self.lstm = LSTMSignalGenerator(model_path=lstm_model_path)
-        
+        # LSTM component (optional, requires TensorFlow)
+        self.lstm = None
+        if HAS_TENSORFLOW:
+            try:
+                self.lstm = LSTMSignalGenerator(model_path=lstm_model_path)
+                logger.info("LSTM component initialized")
+            except Exception as e:
+                logger.warning(f"Failed to initialize LSTM: {e}")
+        else:
+            logger.info("TensorFlow not available - LSTM disabled, using LightGBM + SMC only")
+
         # LightGBM component
         self.lightgbm = None
         if HAS_LIGHTGBM:
@@ -79,7 +93,7 @@ class EnsembleSignalGenerator:
             except Exception as e:
                 logger.warning(f"Failed to initialize LightGBM: {e}")
         else:
-            logger.warning("LightGBM not available - using reduced ensemble")
+            logger.warning("LightGBM not available - using SMC only")
         
         # Legacy RF model (kept for backward compatibility)
         self.rf_model = None
@@ -100,15 +114,19 @@ class EnsembleSignalGenerator:
         metrics = {}
         accuracies = []
 
-        # 1. Train LSTM (weight: 25%)
-        try:
-            lstm_metrics = self.lstm.train(ohlcv_df, epochs=epochs)
-            metrics["lstm_metrics"] = lstm_metrics
-            accuracies.append(lstm_metrics["final_accuracy"])
-            logger.info(f"LSTM trained - accuracy: {lstm_metrics['final_accuracy']:.4f}")
-        except Exception as e:
-            logger.error(f"LSTM training failed: {e}")
-            metrics["lstm_metrics"] = {"error": str(e)}
+        # 1. Train LSTM (weight: 25%) - Optional, requires TensorFlow
+        if self.lstm:
+            try:
+                lstm_metrics = self.lstm.train(ohlcv_df, epochs=epochs)
+                metrics["lstm_metrics"] = lstm_metrics
+                accuracies.append(lstm_metrics["final_accuracy"])
+                logger.info(f"LSTM trained - accuracy: {lstm_metrics['final_accuracy']:.4f}")
+            except Exception as e:
+                logger.error(f"LSTM training failed: {e}")
+                metrics["lstm_metrics"] = {"error": str(e)}
+        else:
+            logger.info("Skipping LSTM training (TensorFlow not available)")
+            metrics["lstm_metrics"] = {"skipped": "TensorFlow not available"}
 
         # 2. Train LightGBM (weight: 35%)
         if self.lightgbm:
@@ -145,8 +163,12 @@ class EnsembleSignalGenerator:
         """Train Random Forest model."""
         logger.info("Training Random Forest component...")
 
-        # Prepare features (reuse LSTM's feature engineering)
-        features = self.lstm._prepare_features(ohlcv_df)
+        # Prepare features (reuse LSTM's feature engineering if available)
+        if self.lstm:
+            features = self.lstm._prepare_features(ohlcv_df)
+        else:
+            # Fallback feature engineering if LSTM not available
+            features = self._prepare_simple_features(ohlcv_df)
 
         # Create targets (same logic as LSTM but flattened for RF)
         # LSTM uses sequences, RF uses rows. We need to align them.
@@ -239,8 +261,8 @@ class EnsembleSignalGenerator:
             except Exception as e:
                 logger.error(f"LightGBM prediction failed: {e}")
 
-        # 3. LSTM Prediction (weight: 25%)
-        if self.lstm.is_trained:
+        # 3. LSTM Prediction (weight: 25%) - Optional, requires TensorFlow
+        if self.lstm and self.lstm.is_trained:
             try:
                 lstm_pred = self.lstm.predict(ohlcv_df)
                 lstm_probs = lstm_pred["probabilities"]
@@ -322,7 +344,11 @@ class EnsembleSignalGenerator:
         if not self.rf_model:
             return {"probabilities": {"buy": 0.33, "sell": 0.33, "hold": 0.33}}
 
-        features = self.lstm._prepare_features(ohlcv_df)
+        if self.lstm:
+            features = self.lstm._prepare_features(ohlcv_df)
+        else:
+            features = self._prepare_simple_features(ohlcv_df)
+
         last_row = features[-1].reshape(1, -1)
 
         # Predict proba: returns array of shape (1, 3) -> [[prob_0, prob_1, prob_2]]
@@ -344,11 +370,12 @@ class EnsembleSignalGenerator:
 
     def save_models(self, path_prefix: str):
         """Save all ensemble models."""
-        # Save LSTM
-        try:
-            self.lstm.save_model(f"{path_prefix}_lstm.h5")
-        except Exception as e:
-            logger.error(f"Failed to save LSTM: {e}")
+        # Save LSTM (if available)
+        if self.lstm:
+            try:
+                self.lstm.save_model(f"{path_prefix}_lstm.h5")
+            except Exception as e:
+                logger.error(f"Failed to save LSTM: {e}")
         
         # Save LightGBM
         if self.lightgbm and self.lightgbm.is_trained:
@@ -379,3 +406,35 @@ class EnsembleSignalGenerator:
             self.lightgbm.load_model(path)
         else:
             logger.warning("LightGBM not initialized, cannot load model")
+
+    def _prepare_simple_features(self, ohlcv_df: pd.DataFrame) -> np.ndarray:
+        """
+        Simple feature engineering fallback when LSTM is not available.
+
+        Args:
+            ohlcv_df: OHLCV DataFrame
+
+        Returns:
+            Feature matrix
+        """
+        df = ohlcv_df.copy()
+
+        # Basic technical indicators
+        df['returns'] = df['close'].pct_change()
+        df['high_low'] = (df['high'] - df['low']) / df['close']
+        df['close_open'] = (df['close'] - df['open']) / df['open']
+
+        # Moving averages
+        df['sma_5'] = df['close'].rolling(5).mean()
+        df['sma_10'] = df['close'].rolling(10).mean()
+        df['sma_20'] = df['close'].rolling(20).mean()
+
+        # Volume features
+        df['volume_sma'] = df['volume'].rolling(20).mean()
+        df['volume_ratio'] = df['volume'] / df['volume_sma']
+
+        # Select features
+        feature_cols = ['returns', 'high_low', 'close_open', 'sma_5', 'sma_10', 'sma_20', 'volume_ratio']
+        features = df[feature_cols].fillna(0).values
+
+        return features

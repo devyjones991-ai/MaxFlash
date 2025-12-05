@@ -54,16 +54,18 @@ class LSTMSignalGenerator:
 
         self.lookback = lookback_periods
         self.prediction_threshold = prediction_threshold
-        self.scaler = MinMaxScaler(feature_range=(0, 1))
+        self.scaler = MinMaxScaler(feature_range=(0, 1)) if HAS_ML else None
         self.is_trained = False
 
-        if model_path:
+        if model_path and HAS_ML:
             self.model = keras.models.load_model(model_path)
             self.is_trained = True
             logger.info(f"Loaded pre-trained model from {model_path}")
-        else:
+        elif HAS_ML:
             self.model = self._build_model()
             logger.info("Initialized new LSTM model")
+        else:
+            self.model = None
 
     def _build_model(self) -> "keras.Model":
         """

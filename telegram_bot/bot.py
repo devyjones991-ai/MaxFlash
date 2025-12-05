@@ -606,11 +606,19 @@ async def check_alerts(context: ContextTypes.DEFAULT_TYPE):
 
 def main():
     """Запуск бота."""
-    print("🤖 Starting MaxFlash Telegram Bot...")
-    
+    # Устанавливаем UTF-8 для консоли Windows
+    import sys
+    if sys.platform == 'win32':
+        try:
+            sys.stdout.reconfigure(encoding='utf-8')
+        except:
+            pass
+
+    logger.info("Starting MaxFlash Telegram Bot...")
+
     # Создаем приложение
     application = Application.builder().token(BOT_TOKEN).build()
-    
+
     # Добавляем обработчики команд
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("price", get_price))
@@ -621,19 +629,23 @@ def main():
     application.add_handler(CommandHandler("scan", scan_all_coins))  # Сканирование всех монет
     application.add_handler(CommandHandler("alert", set_alert))
     application.add_handler(CommandHandler("status", get_status))
-    
+
     # Обработчик callback кнопок
     application.add_handler(CallbackQueryHandler(button_callback))
-    
+
     # Обработчик текстовых сообщений (для быстрых запросов)
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
-    
-    # Периодическая проверка алертов (каждые 30 секунд)
-    application.job_queue.run_repeating(check_alerts, interval=30, first=10)
-    
-    print("✅ Bot is running!")
-    print("📱 Open Telegram and message the bot")
-    
+
+    # Периодическая проверка алертов (каждые 30 секунд) - опционально
+    if application.job_queue:
+        application.job_queue.run_repeating(check_alerts, interval=30, first=10)
+        logger.info("JobQueue enabled - alerts will be checked every 30 seconds")
+    else:
+        logger.warning("JobQueue not available - install with: pip install 'python-telegram-bot[job-queue]'")
+
+    logger.info("Bot is running!")
+    logger.info("Open Telegram and message the bot")
+
     # Запускаем бота
     application.run_polling(allowed_updates=Update.ALL_TYPES)
 
