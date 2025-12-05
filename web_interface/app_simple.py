@@ -407,7 +407,10 @@ def create_simple_app():
                 ], md=3),
                 dbc.Col([
                     dbc.Label("\u00A0", className="fw-bold"),
-                    dbc.Button("🔄 Обновить", id="refresh-button", color="primary", className="w-100"),
+                    dbc.ButtonGroup([
+                        dbc.Button("🔄", id="refresh-button", color="primary", title="Обновить данные"),
+                        dbc.Button("🎯 Сигнал", id="generate-signal-btn", color="success", title="Сгенерировать сигнал"),
+                    ], className="w-100"),
                 ], md=2),
             ], className="mb-3"),
 
@@ -487,12 +490,23 @@ def create_simple_app():
             
             # Store for caching previous data (for incremental updates)
             dcc.Store(id="cache-store", data={"last_symbol": None, "last_price": None}),
+            
+            # Signal notification toast
+            dbc.Toast(
+                id="signal-toast",
+                header="🎯 Новый сигнал!",
+                is_open=False,
+                dismissable=True,
+                duration=10000,  # 10 секунд
+                icon="success",
+                style={"position": "fixed", "top": 80, "right": 20, "width": 350, "zIndex": 9999},
+            ),
         ],
         fluid=True,
         style={"backgroundColor": "#0a0a0a", "minHeight": "100vh", "padding": "20px"}
     )
 
-    # Cache for optimized updates
+    # Cache for optimized updates - use mutable default to persist between calls
     _dashboard_cache = {
         'last_symbol': None,
         'last_exchange': None,
@@ -530,27 +544,29 @@ def create_simple_app():
         - Генерация сигналов каждые 5 обновлений (15 сек)
         """
         try:
-            # Проверяем, изменились ли параметры
+            # Проверяем, изменились ли параметры (symbol, exchange, timeframe)
             params_changed = (
                 _dashboard_cache['last_symbol'] != symbol or
                 _dashboard_cache['last_exchange'] != exchange or
                 _dashboard_cache['last_timeframe'] != timeframe
             )
             
-            # Принудительное обновление при нажатии кнопки или изменении параметров
-            force_refresh = n_clicks is not None and params_changed
+            # Принудительное обновление при изменении параметров ИЛИ нажатии кнопки
+            force_refresh = params_changed or (n_clicks is not None and n_clicks > 0)
             
             if params_changed:
                 logger.info(f"Параметры изменены: {symbol} {timeframe} от {exchange}")
                 _dashboard_cache['signal_update_counter'] = 0
+                # Очищаем кэш сигналов при смене параметров
+                _dashboard_cache['signals_cache'] = []
             
-            # Получаем данные (force_refresh только при изменении параметров)
+            # Получаем данные - ВСЕГДА обновляем для real-time
             df = data_manager.get_ohlcv(
                 symbol=symbol, 
                 timeframe=timeframe, 
                 limit=200, 
                 exchange_id=exchange,
-                force_refresh=force_refresh
+                force_refresh=force_refresh  # True при смене параметров
             )
 
             if df is None or df.empty:
@@ -624,6 +640,85 @@ def create_simple_app():
                 html.Span(f"Ошибка: {str(e)}")
             ]
             return create_empty_chart(), html.P("Ошибка загрузки данных"), status_content
+
+    # Callback для генерации сигналов по кнопке
+    @app.callback(
+        [
+            Output("signal-toast", "children"),
+            Output("signal-toast", "is_open"),
+            Output("signal-toast", "header"),
+            Output("signal-toast", "icon"),
+        ],
+        [Input("generate-signal-btn", "n_clicks")],
+        [
+            dash.dependencies.State("symbol-dropdown", "value"),
+            dash.dependencies.State("timeframe-dropdown", "value"),
+        ],
+        prevent_initial_call=True
+    )
+    def generate_signal_on_click(n_clicks, symbol, timeframe):
+        """Генерация сигнала по клику на кнопку."""
+        if not n_clicks:
+            return "", False, "", "info"
+        
+        try:
+            # Генерируем сигналы
+            signals = signal_generator.generate_signals(
+                symbol=symbol,
+                timeframe=timeframe,
+                limit=200
+            )
+            
+            if signals:
+                signal = signals[0]  # Берём первый (самый сильный) сигнал
+                signal_type = signal.signal_type
+                
+                # Определяем цвет и иконку
+                if signal_type == "LONG":
+                    icon = "success"
+                    header = "🟢 LONG Сигнал!"
+                    bg_color = "#1a3d2e"
+                else:
+                    icon = "danger"
+                    header = "🔴 SHORT Сигнал!"
+                    bg_color = "#3d1a2e"
+                
+                content = html.Div([
+                    html.P([
+                        html.Strong(f"{symbol}"),
+                        html.Span(f" ({timeframe})", style={"color": "#888"})
+                    ]),
+                    html.Hr(style={"margin": "8px 0", "borderColor": "#444"}),
+                    html.Div([
+                        html.Span("Entry: ", style={"color": "#888"}),
+                        html.Strong(f"${signal.entry_price:,.2f}", style={"color": "#00d4ff"}),
+                    ]),
+                    html.Div([
+                        html.Span("TP: ", style={"color": "#888"}),
+                        html.Strong(f"${signal.take_profit:,.2f}", style={"color": "#00ff88"}),
+                    ]),
+                    html.Div([
+                        html.Span("SL: ", style={"color": "#888"}),
+                        html.Strong(f"${signal.stop_loss:,.2f}", style={"color": "#ff3366"}),
+                    ]),
+                    html.Div([
+                        html.Span("Confidence: ", style={"color": "#888"}),
+                        html.Strong(f"{signal.confidence:.1%}", style={"color": "#ffd700"}),
+                    ], style={"marginTop": "5px"}),
+                    html.Div([
+                        html.Small(f"Индикаторы: {', '.join(signal.indicators[:3])}", 
+                                  style={"color": "#666", "fontSize": "11px"})
+                    ], style={"marginTop": "8px"}),
+                ], style={"backgroundColor": bg_color, "padding": "10px", "borderRadius": "5px"})
+                
+                return content, True, header, icon
+            else:
+                return html.P("Нет сигналов на данный момент. Попробуйте другую пару или таймфрейм.", 
+                             style={"color": "#888"}), True, "ℹ️ Нет сигналов", "info"
+                
+        except Exception as e:
+            logger.error(f"Ошибка генерации сигнала: {e}")
+            return html.P(f"Ошибка: {str(e)}", style={"color": "#ff3366"}), True, "❌ Ошибка", "danger"
 
     return app
 
