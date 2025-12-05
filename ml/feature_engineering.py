@@ -11,6 +11,10 @@ import warnings
 warnings.filterwarnings("ignore")
 
 from utils.logger_config import setup_logging
+from indicators.trend.adx import ADXCalculator
+from indicators.volume.obv import OBVCalculator
+from indicators.volume.vwap import VWAPCalculator
+from indicators.trend.donchian import DonchianChannelCalculator
 
 logger = setup_logging()
 
@@ -126,6 +130,157 @@ def create_technical_features(ohlcv: pd.DataFrame) -> pd.DataFrame:
     return features
 
 
+def create_trend_strength_features(ohlcv: pd.DataFrame) -> pd.DataFrame:
+    """
+    Create trend strength features using ADX.
+
+    Args:
+        ohlcv: OHLCV DataFrame
+
+    Returns:
+        DataFrame with ADX-based trend strength features
+    """
+    features = pd.DataFrame(index=ohlcv.index)
+
+    try:
+        adx_calc = ADXCalculator()
+        adx_data = adx_calc.calculate_adx(ohlcv)
+
+        # ADX features
+        features['adx'] = adx_data['adx']
+        features['di_plus'] = adx_data['di_plus']
+        features['di_minus'] = adx_data['di_minus']
+
+        # Derived features
+        features['adx_strong_trend'] = (adx_data['adx'] > 25).astype(int)
+        features['adx_weak_trend'] = (adx_data['adx'] < 20).astype(int)
+        features['di_bullish'] = (adx_data['di_plus'] > adx_data['di_minus']).astype(int)
+        features['di_spread'] = adx_data['di_plus'] - adx_data['di_minus']
+        features['di_ratio'] = adx_data['di_plus'] / adx_data['di_minus'].replace(0, np.nan)
+
+        # ADX trend
+        features['adx_rising'] = adx_data['adx'].diff(5) > 0
+        features['adx_rising'] = features['adx_rising'].astype(int)
+
+    except Exception as e:
+        logger.warning(f"Failed to create ADX features: {e}")
+        # Fill with defaults if calculation fails
+        for col in ['adx', 'di_plus', 'di_minus', 'adx_strong_trend', 'adx_weak_trend',
+                    'di_bullish', 'di_spread', 'di_ratio', 'adx_rising']:
+            features[col] = 0
+
+    return features
+
+
+def create_volume_strength_features(ohlcv: pd.DataFrame) -> pd.DataFrame:
+    """
+    Create volume strength features using OBV and VWAP.
+
+    Args:
+        ohlcv: OHLCV DataFrame
+
+    Returns:
+        DataFrame with OBV and VWAP features
+    """
+    features = pd.DataFrame(index=ohlcv.index)
+
+    try:
+        # OBV features
+        obv_calc = OBVCalculator()
+        obv_data = obv_calc.calculate_obv(ohlcv)
+
+        # Normalize OBV
+        obv_normalized = obv_calc.normalize_obv(obv_data)
+        features['obv_normalized'] = obv_normalized['normalized_obv']
+
+        # OBV signal
+        features['obv_bullish'] = (obv_data['obv_signal'] == 'bullish').astype(int)
+        features['obv_bearish'] = (obv_data['obv_signal'] == 'bearish').astype(int)
+
+        # OBV trend
+        features['obv_rising'] = (obv_data['obv_trend'] == 'rising').astype(int)
+        features['obv_falling'] = (obv_data['obv_trend'] == 'falling').astype(int)
+
+        # OBV divergence
+        features['obv_divergence_bullish'] = (obv_data['obv_divergence'] == 'bullish').astype(int)
+        features['obv_divergence_bearish'] = (obv_data['obv_divergence'] == 'bearish').astype(int)
+
+    except Exception as e:
+        logger.warning(f"Failed to create OBV features: {e}")
+        for col in ['obv_normalized', 'obv_bullish', 'obv_bearish', 'obv_rising',
+                    'obv_falling', 'obv_divergence_bullish', 'obv_divergence_bearish']:
+            features[col] = 0
+
+    try:
+        # VWAP features
+        vwap_calc = VWAPCalculator()
+        vwap_data = vwap_calc.calculate_vwap(ohlcv, reset_daily=False)  # Cumulative VWAP
+
+        features['vwap'] = vwap_data['vwap']
+        features['price_to_vwap'] = ohlcv['close'] / vwap_data['vwap']
+        features['above_vwap'] = (vwap_data['vwap_position'] == 'above').astype(int)
+        features['below_vwap'] = (vwap_data['vwap_position'] == 'below').astype(int)
+        features['vwap_distance_pct'] = vwap_data['vwap_distance_pct']
+
+        # VWAP bands
+        features['near_vwap_upper'] = (ohlcv['close'] > vwap_data['vwap_upper_1std']).astype(int)
+        features['near_vwap_lower'] = (ohlcv['close'] < vwap_data['vwap_lower_1std']).astype(int)
+
+    except Exception as e:
+        logger.warning(f"Failed to create VWAP features: {e}")
+        for col in ['vwap', 'price_to_vwap', 'above_vwap', 'below_vwap',
+                    'vwap_distance_pct', 'near_vwap_upper', 'near_vwap_lower']:
+            features[col] = 0
+
+    return features
+
+
+def create_channel_features(ohlcv: pd.DataFrame) -> pd.DataFrame:
+    """
+    Create channel features using Donchian Channels.
+
+    Args:
+        ohlcv: OHLCV DataFrame
+
+    Returns:
+        DataFrame with Donchian Channel features
+    """
+    features = pd.DataFrame(index=ohlcv.index)
+
+    try:
+        dc_calc = DonchianChannelCalculator()
+        dc_data = dc_calc.calculate_donchian(ohlcv)
+
+        # Channel position
+        features['dc_position'] = dc_data['dc_position']
+        features['dc_width'] = dc_data['dc_width']
+
+        # Channel breakouts
+        features['dc_breakout_upper'] = (dc_data['dc_breakout'] == 'upper').astype(int)
+        features['dc_breakout_lower'] = (dc_data['dc_breakout'] == 'lower').astype(int)
+
+        # Channel trend
+        features['dc_uptrend'] = (dc_data['dc_trend'] == 'uptrend').astype(int)
+        features['dc_downtrend'] = (dc_data['dc_trend'] == 'downtrend').astype(int)
+        features['dc_ranging'] = (dc_data['dc_trend'] == 'ranging').astype(int)
+
+        # Channel squeeze
+        features['dc_squeeze'] = dc_data['dc_squeeze'].astype(int)
+
+        # Distance from bands
+        features['dc_distance_upper'] = (dc_data['dc_upper'] - ohlcv['close']) / ohlcv['close']
+        features['dc_distance_lower'] = (ohlcv['close'] - dc_data['dc_lower']) / ohlcv['close']
+
+    except Exception as e:
+        logger.warning(f"Failed to create Donchian Channel features: {e}")
+        for col in ['dc_position', 'dc_width', 'dc_breakout_upper', 'dc_breakout_lower',
+                    'dc_uptrend', 'dc_downtrend', 'dc_ranging', 'dc_squeeze',
+                    'dc_distance_upper', 'dc_distance_lower']:
+            features[col] = 0
+
+    return features
+
+
 def create_smart_money_features(indicators: Dict[str, Any]) -> pd.Series:
     """
     Create features from Smart Money indicators.
@@ -162,13 +317,18 @@ def create_smart_money_features(indicators: Dict[str, Any]) -> pd.Series:
     return pd.Series(features)
 
 
-def create_all_features(ohlcv: pd.DataFrame, smart_money_indicators: Optional[Dict[str, Any]] = None) -> pd.DataFrame:
+def create_all_features(
+    ohlcv: pd.DataFrame,
+    smart_money_indicators: Optional[Dict[str, Any]] = None,
+    use_new_features: bool = True
+) -> pd.DataFrame:
     """
     Create complete feature set for ML models.
 
     Args:
         ohlcv: OHLCV DataFrame
         smart_money_indicators: Optional Smart Money indicators
+        use_new_features: Include new ADX/OBV/VWAP/Donchian features (default True)
 
     Returns:
         Complete feature DataFrame
@@ -178,8 +338,24 @@ def create_all_features(ohlcv: pd.DataFrame, smart_money_indicators: Optional[Di
     volume_features = create_volume_features(ohlcv)
     technical_features = create_technical_features(ohlcv)
 
-    # Combine features
-    all_features = pd.concat([price_features, volume_features, technical_features], axis=1)
+    # Create new advanced features if enabled
+    if use_new_features:
+        trend_strength_features = create_trend_strength_features(ohlcv)
+        volume_strength_features = create_volume_strength_features(ohlcv)
+        channel_features = create_channel_features(ohlcv)
+
+        # Combine all features
+        all_features = pd.concat([
+            price_features,
+            volume_features,
+            technical_features,
+            trend_strength_features,
+            volume_strength_features,
+            channel_features
+        ], axis=1)
+    else:
+        # Legacy: only base features
+        all_features = pd.concat([price_features, volume_features, technical_features], axis=1)
 
     # Add Smart Money features if available
     if smart_money_indicators:

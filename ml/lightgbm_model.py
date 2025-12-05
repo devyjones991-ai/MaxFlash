@@ -26,6 +26,7 @@ except ImportError:
     lgb = None
 
 from utils.logger_config import setup_logging
+from ml.feature_engineering import create_all_features
 
 logger = setup_logging()
 
@@ -278,23 +279,36 @@ class LightGBMSignalGenerator:
         num_boost_round: int = 500,
         early_stopping_rounds: int = 50,
         test_size: float = 0.2,
+        use_new_features: bool = False,
     ) -> Dict[str, Any]:
         """
         Train the LightGBM model.
-        
+
         Args:
             df: OHLCV DataFrame with optional indicators
             num_boost_round: Number of boosting rounds
             early_stopping_rounds: Early stopping patience
             test_size: Test set proportion
-            
+            use_new_features: Use enhanced feature engineering (ADX, OBV, VWAP, Donchian)
+
         Returns:
             Training metrics dictionary
         """
         logger.info(f"Training LightGBM on {len(df)} samples...")
-        
+        logger.info(f"Using enhanced features: {use_new_features}")
+
         # Prepare features
-        X, self.feature_names = self._prepare_features(df)
+        if use_new_features:
+            # Use enhanced feature engineering from feature_engineering.py
+            features_df = create_all_features(df, smart_money_indicators=None, use_new_features=True)
+            X = features_df.values
+            self.feature_names = features_df.columns.tolist()
+            logger.info(f"Using {len(self.feature_names)} enhanced features (ADX, OBV, VWAP, Donchian)")
+        else:
+            # Use legacy feature engineering
+            X, self.feature_names = self._prepare_features(df)
+            logger.info(f"Using {len(self.feature_names)} legacy features")
+
         y = self._create_labels(df)
         
         # Align lengths
@@ -479,5 +493,6 @@ def get_lightgbm_generator() -> LightGBMSignalGenerator:
             logger.error(f"Failed to create LightGBM generator: {e}")
             raise
     return _lightgbm_generator
+
 
 
