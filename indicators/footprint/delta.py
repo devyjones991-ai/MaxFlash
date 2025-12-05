@@ -27,6 +27,7 @@ class DeltaAnalyzer:
 
         Args:
             dataframe: DataFrame with footprint data (must have fp_buy_volume and fp_sell_volume)
+                      OR OHLCV data (will estimate buy/sell volume)
 
         Returns:
             DataFrame with added columns:
@@ -36,6 +37,18 @@ class DeltaAnalyzer:
             - delta_divergence: Detected divergence
         """
         df = dataframe.copy()
+
+        # Check if footprint data exists, otherwise estimate from OHLCV
+        if 'fp_buy_volume' not in df.columns:
+            # Estimate buy/sell volume from OHLCV data
+            # Heuristic: If close > open, more buying; if close < open, more selling
+            price_range = df['high'] - df['low']
+            close_position = (df['close'] - df['low']) / price_range.replace(0, 1)
+
+            # Estimate buy volume: higher close position = more buying
+            df['fp_buy_volume'] = df['volume'] * close_position
+            df['fp_sell_volume'] = df['volume'] * (1 - close_position)
+            df['fp_total_volume'] = df['volume']
 
         # Calculate Delta
         df["delta"] = df["fp_buy_volume"] - df["fp_sell_volume"]
