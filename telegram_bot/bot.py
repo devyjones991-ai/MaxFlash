@@ -106,7 +106,7 @@ async def get_price(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await _send_price(update.message, symbol)
 
 
-async def _send_price(message, symbol: str):
+async def _send_price(message, symbol: str, is_callback=False):
     """Отправляет цену для указанного символа."""
     try:
         # Получаем тикер
@@ -157,11 +157,17 @@ async def _send_price(message, symbol: str):
             [
                 InlineKeyboardButton("🔄 Обновить", callback_data=f"price_{symbol}"),
                 InlineKeyboardButton("🎯 Сигнал", callback_data=f"signal_{symbol}"),
+            ],
+            [
+                InlineKeyboardButton("🏠 Главное меню", callback_data="main_menu"),
             ]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
         
-        await message.reply_text(text, parse_mode='Markdown', reply_markup=reply_markup)
+        if is_callback:
+            await message.edit_text(text, parse_mode='Markdown', reply_markup=reply_markup)
+        else:
+            await message.reply_text(text, parse_mode='Markdown', reply_markup=reply_markup)
         
     except Exception as e:
         logger.error(f"Ошибка получения цены {symbol}: {e}")
@@ -180,11 +186,15 @@ async def get_signal(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await _send_signal(update.message, symbol)
 
 
-async def _send_signal(message, symbol: str):
+async def _send_signal(message, symbol: str, is_callback=False):
     """Отправляет сигнал для указанного символа (независимый сканер!)."""
     try:
         # Отправляем сообщение о генерации
-        status_msg = await message.reply_text(f"⏳ Анализирую {symbol}...")
+        if is_callback:
+            status_msg = message  # Уже сообщение для редактирования
+            await status_msg.edit_text(f"⏳ Анализирую {symbol}...")
+        else:
+            status_msg = await message.reply_text(f"⏳ Анализирую {symbol}...")
         
         # Используем независимый сканер
         signal = signal_scanner.scan_single(symbol)
@@ -222,6 +232,9 @@ async def _send_signal(message, symbol: str):
                 [
                     InlineKeyboardButton("🔄 Обновить", callback_data=f"signal_{symbol}"),
                     InlineKeyboardButton("📊 Цена", callback_data=f"price_{symbol}"),
+                ],
+                [
+                    InlineKeyboardButton("🏠 Главное меню", callback_data="main_menu"),
                 ]
             ]
             reply_markup = InlineKeyboardMarkup(keyboard)
@@ -242,6 +255,9 @@ async def _send_signal(message, symbol: str):
                 [
                     InlineKeyboardButton("🔄 Обновить", callback_data=f"signal_{symbol}"),
                     InlineKeyboardButton("🔍 Скан всех", callback_data="scan_all"),
+                ],
+                [
+                    InlineKeyboardButton("🏠 Главное меню", callback_data="main_menu"),
                 ]
             ]
             reply_markup = InlineKeyboardMarkup(keyboard)
@@ -258,10 +274,13 @@ async def get_top(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await _send_top(update.message)
 
 
-async def _send_top(message):
+async def _send_top(message, is_callback=False):
     """Отправляет топ монет."""
     try:
-        status_msg = await message.reply_text("⏳ Загружаю данные...")
+        if not is_callback:
+            status_msg = await message.reply_text("⏳ Загружаю данные...")
+        else:
+            status_msg = message  # Уже сообщение для редактирования
         
         results = []
         for symbol in POPULAR_PAIRS:
@@ -294,14 +313,20 @@ async def _send_top(message):
         
         text += f"\n🕐 {datetime.now().strftime('%H:%M:%S')}"
         
-        keyboard = [[InlineKeyboardButton("🔄 Обновить", callback_data="top5")]]
+        keyboard = [
+            [InlineKeyboardButton("🔄 Обновить", callback_data="top5")],
+            [InlineKeyboardButton("🏠 Главное меню", callback_data="main_menu")],
+        ]
         reply_markup = InlineKeyboardMarkup(keyboard)
         
         await status_msg.edit_text(text, parse_mode='Markdown', reply_markup=reply_markup)
         
     except Exception as e:
         logger.error(f"Ошибка получения топа: {e}")
-        await message.reply_text(f"❌ Ошибка: {str(e)}")
+        if not is_callback:
+            await message.reply_text(f"❌ Ошибка: {str(e)}")
+        else:
+            await message.edit_text(f"❌ Ошибка: {str(e)}")
 
 
 async def set_alert(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -358,10 +383,13 @@ async def scan_all_coins(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await _send_scan_results(update.message)
 
 
-async def _send_scan_results(message):
+async def _send_scan_results(message, is_callback=False):
     """Сканирует все монеты и отправляет результаты."""
     try:
-        status_msg = await message.reply_text("🔍 Сканирую 50 монет... Это займёт ~30 сек.")
+        if is_callback:
+            status_msg = message  # Уже сообщение для редактирования
+        else:
+            status_msg = await message.reply_text("🔍 Сканирую 50 монет... Это займёт ~30 сек.")
         
         # Сканируем все монеты
         signals = signal_scanner.scan_all()
@@ -383,13 +411,26 @@ async def _send_scan_results(message):
             
             text += "\n\n💡 Для деталей: /signal `SYMBOL`"
             
-            await status_msg.edit_text(text, parse_mode='Markdown')
+            keyboard = [
+                [InlineKeyboardButton("🔄 Обновить", callback_data="scan_all")],
+                [InlineKeyboardButton("🏠 Главное меню", callback_data="main_menu")],
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            
+            await status_msg.edit_text(text, parse_mode='Markdown', reply_markup=reply_markup)
         else:
+            keyboard = [
+                [InlineKeyboardButton("🔄 Обновить", callback_data="scan_all")],
+                [InlineKeyboardButton("🏠 Главное меню", callback_data="main_menu")],
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            
             await status_msg.edit_text(
                 "⏸️ *Нет сигналов*\n\n"
                 "В данный момент нет чётких торговых сигналов по топ-50 монетам.\n"
                 "Рынок в состоянии неопределённости.",
-                parse_mode='Markdown'
+                parse_mode='Markdown',
+                reply_markup=reply_markup
             )
             
     except Exception as e:
@@ -402,7 +443,7 @@ async def get_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await _send_status(update.message)
 
 
-async def _send_status(message):
+async def _send_status(message, is_callback=False):
     """Отправляет статус системы."""
     try:
         # Проверяем подключение к биржам
@@ -417,27 +458,36 @@ async def _send_status(message):
             except:
                 exchanges_status.append(f"❌ {exchange.upper()}")
         
-        # ML статус
-        ml_status = "✅ Активен" if signal_generator.ensemble else "⚠️ Только SMC"
-        
         text = f"""
 📈 *Статус MaxFlash*
 
 *Биржи:*
 {chr(10).join(exchanges_status)}
 
-*ML Engine:* {ml_status}
+*Сигналы:* ✅ Активен
 
 *Активные алерты:* {sum(len(v) for v in user_alerts.values())}
 
 🕐 {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
 """
         
-        await message.reply_text(text, parse_mode='Markdown')
+        keyboard = [
+            [InlineKeyboardButton("🔄 Обновить", callback_data="status")],
+            [InlineKeyboardButton("🏠 Главное меню", callback_data="main_menu")],
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        if is_callback:
+            await message.edit_text(text, parse_mode='Markdown', reply_markup=reply_markup)
+        else:
+            await message.reply_text(text, parse_mode='Markdown', reply_markup=reply_markup)
         
     except Exception as e:
         logger.error(f"Ошибка статуса: {e}")
-        await message.reply_text(f"❌ Ошибка: {str(e)}")
+        if is_callback:
+            await message.edit_text(f"❌ Ошибка: {str(e)}")
+        else:
+            await message.reply_text(f"❌ Ошибка: {str(e)}")
 
 
 async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -449,57 +499,66 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     if data.startswith("price_"):
         symbol = data.replace("price_", "")
-        await _send_price(query.message, symbol)
+        await _send_price(query.message, symbol, is_callback=True)
         
     elif data.startswith("signal_"):
         symbol = data.replace("signal_", "")
-        # Для callback используем edit_text через отдельную функцию
-        try:
-            await query.message.edit_text(f"⏳ Анализирую {symbol}...")
-            signals = signal_generator.generate_signals(symbol=symbol, timeframe="15m", limit=200)
-            
-            if signals:
-                signal = signals[0]
-                emoji = "🟢" if signal.signal_type == "LONG" else "🔴"
-                direction = "LONG" if signal.signal_type == "LONG" else "SHORT"
-                
-                risk = abs(signal.entry_price - signal.stop_loss)
-                reward = abs(signal.take_profit - signal.entry_price)
-                rr_ratio = reward / risk if risk > 0 else 0
-                
-                text = f"""
-{emoji} *СИГНАЛ {direction}*
-
-📍 *{symbol}* (15m)
-🎯 Entry: `${signal.entry_price:,.2f}`
-✅ TP: `${signal.take_profit:,.2f}`
-🛑 SL: `${signal.stop_loss:,.2f}`
-📊 Confidence: `{signal.confidence:.0%}`
-⚖️ R/R: `1:{rr_ratio:.1f}`
-"""
-            else:
-                text = f"⏸️ *Нет сигнала* для {symbol}\n\nУсловия не соответствуют критериям входа."
-            
-            keyboard = [
-                [
-                    InlineKeyboardButton("🔄", callback_data=f"signal_{symbol}"),
-                    InlineKeyboardButton("📊", callback_data=f"price_{symbol}"),
-                ]
-            ]
-            await query.message.edit_text(text, parse_mode='Markdown', reply_markup=InlineKeyboardMarkup(keyboard))
-        except Exception as e:
-            await query.message.edit_text(f"❌ Ошибка: {str(e)}")
+        # Используем правильный метод через сканер
+        await _send_signal(query.message, symbol, is_callback=True)
         
     elif data == "top5":
         await query.message.edit_text("⏳ Загружаю...")
-        await _send_top(query.message)
+        await _send_top(query.message, is_callback=True)
         
     elif data == "status":
-        await _send_status(query.message)
+        await query.message.edit_text("⏳ Загружаю статус...")
+        await _send_status(query.message, is_callback=True)
     
     elif data == "scan_all":
-        await query.message.edit_text("🔍 Сканирую 50 монет...")
-        await _send_scan_results(query.message)
+        await query.message.edit_text("🔍 Сканирую 50 монет... Это займёт ~30 сек.")
+        await _send_scan_results(query.message, is_callback=True)
+    
+    elif data == "main_menu":
+        # Возврат в главное меню
+        keyboard = [
+            [
+                InlineKeyboardButton("📊 BTC", callback_data="price_BTC/USDT"),
+                InlineKeyboardButton("📊 ETH", callback_data="price_ETH/USDT"),
+                InlineKeyboardButton("📊 SOL", callback_data="price_SOL/USDT"),
+            ],
+            [
+                InlineKeyboardButton("🎯 Сигнал BTC", callback_data="signal_BTC/USDT"),
+                InlineKeyboardButton("🎯 Сигнал ETH", callback_data="signal_ETH/USDT"),
+            ],
+            [
+                InlineKeyboardButton("🔍 СКАН ВСЕХ 50", callback_data="scan_all"),
+            ],
+            [
+                InlineKeyboardButton("🔝 Топ-5", callback_data="top5"),
+                InlineKeyboardButton("📈 Статус", callback_data="status"),
+            ],
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        welcome_text = """
+🚀 *MaxFlash Trading Bot*
+
+Добро пожаловать! Я сканирую топ-50 криптовалют.
+
+*Команды:*
+/price `BTC` - Текущая цена
+/signal `ETH` - Торговый сигнал
+/scan - 🔍 *Сканировать все 50 монет*
+/top - Топ монет за 24ч
+/alert `BTC 100000` - Установить алерт
+
+Или используй кнопки ниже 👇
+"""
+        await query.message.edit_text(
+            welcome_text, 
+            reply_markup=reply_markup,
+            parse_mode='Markdown'
+        )
 
 
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
