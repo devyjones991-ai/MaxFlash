@@ -2,6 +2,12 @@
 Упрощенная версия dashboard для быстрого запуска.
 Минимальные зависимости, максимальная простота.
 """
+import sys
+from pathlib import Path
+
+# Add project root to path
+PROJECT_ROOT = Path(__file__).parent.parent
+sys.path.insert(0, str(PROJECT_ROOT))
 
 try:
     from datetime import datetime
@@ -11,9 +17,36 @@ try:
     import numpy as np
     import pandas as pd
     import plotly.graph_objects as go
-    from dash import Input, Output, dcc, html
+    from dash import Input, Output, dcc, html, dash_table
+    from plotly.subplots import make_subplots
+
+    from utils.market_data_manager import MarketDataManager
+    from utils.signal_generator import SignalGenerator
+    from utils.logger_config import setup_logging
 
     HAS_DEPS = True
+    logger = setup_logging()
+
+    # Инициализация менеджеров
+    data_manager = MarketDataManager()
+    signal_generator = SignalGenerator(data_manager=data_manager)
+
+    # Топ 50 криптовалют по рыночной капитализации
+    TOP_50_COINS = [
+        "BTC/USDT", "ETH/USDT", "BNB/USDT", "SOL/USDT", "XRP/USDT",
+        "ADA/USDT", "AVAX/USDT", "DOGE/USDT", "DOT/USDT", "MATIC/USDT",
+        "LINK/USDT", "UNI/USDT", "ATOM/USDT", "LTC/USDT", "NEAR/USDT",
+        "APT/USDT", "ARB/USDT", "OP/USDT", "TIA/USDT", "FIL/USDT",
+        "ICP/USDT", "STX/USDT", "IMX/USDT", "HBAR/USDT", "INJ/USDT",
+        "VET/USDT", "SUI/USDT", "SEI/USDT", "RUNE/USDT", "MKR/USDT",
+        "AAVE/USDT", "GRT/USDT", "FTM/USDT", "ALGO/USDT", "ETC/USDT",
+        "THETA/USDT", "XLM/USDT", "FLOW/USDT", "EOS/USDT", "SAND/USDT",
+        "MANA/USDT", "AXS/USDT", "KAVA/USDT", "WLD/USDT", "PEPE/USDT",
+        "FET/USDT", "GALA/USDT", "CHZ/USDT", "ZIL/USDT", "ENJ/USDT"
+    ]
+
+    EXCHANGES = ["binance", "bybit", "okx", "kraken"]
+
 except ImportError as e:
     HAS_DEPS = False
     MISSING = str(e).split("'")[1] if "'" in str(e) else "dash"
@@ -43,57 +76,418 @@ def create_simple_app():
 
     app.layout = dbc.Container(
         [
-            dbc.Row(
-                [
-                    dbc.Col(
-                        [
-                            html.H1("📊 MaxFlash Trading Dashboard", className="text-center mb-4"),
-                            dbc.Alert(
-                                "✅ Dashboard запущен! Графики загружаются...", color="success", className="mb-3"
-                            ),
-                        ]
-                    )
-                ]
-            ),
-            dbc.Row(
-                [
-                    dbc.Col(
-                        [
-                            dbc.Card(
-                                [
-                                    dbc.CardHeader("Price Chart"),
-                                    dbc.CardBody(
-                                        [
-                                            dcc.Graph(figure=create_sample_chart(), style={"height": "600px"}),
-                                            dcc.Interval(id="interval", interval=15 * 1000, n_intervals=0),
-                                        ]
-                                    ),
-                                ]
-                            )
+            # Header
+            dbc.Row([
+                dbc.Col([
+                    html.H1("📊 MaxFlash Live Trading Dashboard",
+                           className="text-center mb-2",
+                           style={"color": "#00d4ff", "fontWeight": "bold"}),
+                    html.P("Real-time market data and AI trading signals",
+                          className="text-center text-muted mb-4"),
+                ])
+            ]),
+
+            # Status Bar
+            dbc.Row([
+                dbc.Col(dbc.Alert(
+                    id="status-alert",
+                    children="✅ Dashboard загружается...",
+                    color="success",
+                    className="mb-3"
+                ), width=12)
+            ]),
+
+            # Controls Row 1
+            dbc.Row([
+                dbc.Col([
+                    dbc.Label("Торговая пара:", className="fw-bold"),
+                    dcc.Dropdown(
+                        id="symbol-dropdown",
+                        options=[{"label": p, "value": p} for p in TOP_50_COINS],
+                        value="BTC/USDT",
+                        clearable=False,
+                        searchable=True,
+                    ),
+                ], md=4),
+                dbc.Col([
+                    dbc.Label("Биржа:", className="fw-bold"),
+                    dcc.Dropdown(
+                        id="exchange-dropdown",
+                        options=[
+                            {"label": "Binance", "value": "binance"},
+                            {"label": "Bybit", "value": "bybit"},
+                            {"label": "OKX", "value": "okx"},
+                            {"label": "Kraken", "value": "kraken"},
                         ],
-                        width=12,
-                    )
-                ]
-            ),
+                        value="binance",
+                        clearable=False,
+                    ),
+                ], md=3),
+                dbc.Col([
+                    dbc.Label("Таймфрейм:", className="fw-bold"),
+                    dcc.Dropdown(
+                        id="timeframe-dropdown",
+                        options=[{"label": tf, "value": tf} for tf in ["1m", "5m", "15m", "1h", "4h", "1d"]],
+                        value="15m",
+                        clearable=False,
+                    ),
+                ], md=3),
+                dbc.Col([
+                    dbc.Label("\u00A0", className="fw-bold"),
+                    dbc.Button("🔄 Обновить", id="refresh-button", color="primary", className="w-100"),
+                ], md=2),
+            ], className="mb-3"),
+
+            # Controls Row 2 - Chart Indicators
+            dbc.Row([
+                dbc.Col([
+                    dbc.Label("Индикаторы:", className="fw-bold"),
+                    dcc.Dropdown(
+                        id="indicators-dropdown",
+                        options=[
+                            {"label": "MA (20, 50, 200)", "value": "ma"},
+                            {"label": "EMA (9, 21, 55)", "value": "ema"},
+                            {"label": "Bollinger Bands", "value": "bb"},
+                            {"label": "Volume Profile", "value": "vp"},
+                            {"label": "Support/Resistance", "value": "sr"},
+                        ],
+                        value=["ma"],
+                        multi=True,
+                    ),
+                ], md=6),
+                dbc.Col([
+                    dbc.Label("Осцилляторы:", className="fw-bold"),
+                    dcc.Dropdown(
+                        id="oscillators-dropdown",
+                        options=[
+                            {"label": "RSI (14)", "value": "rsi"},
+                            {"label": "MACD", "value": "macd"},
+                            {"label": "Stochastic", "value": "stoch"},
+                        ],
+                        value=[],
+                        multi=True,
+                    ),
+                ], md=6),
+            ], className="mb-4"),
+
+            # Main Chart
+            dbc.Row([
+                dbc.Col([
+                    dbc.Card([
+                        dbc.CardHeader(html.H5("📈 Price Chart & Signals", className="mb-0"),
+                                      style={"backgroundColor": "#2a2a2a"}),
+                        dbc.CardBody([
+                            dcc.Loading(
+                                id="loading-chart",
+                                children=[dcc.Graph(id="main-chart", style={"height": "700px"})]
+                            ),
+                        ]),
+                    ], style={"backgroundColor": "#1e1e1e", "border": "1px solid #333"}),
+                ], width=12)
+            ], className="mb-4"),
+
+            # Signals Table
+            dbc.Row([
+                dbc.Col([
+                    dbc.Card([
+                        dbc.CardHeader(html.H5("🎯 Active Signals", className="mb-0"),
+                                      style={"backgroundColor": "#2a2a2a"}),
+                        dbc.CardBody([
+                            dcc.Loading(id="loading-signals", children=[html.Div(id="signals-table")]),
+                        ]),
+                    ], style={"backgroundColor": "#1e1e1e", "border": "1px solid #333"}),
+                ], width=12)
+            ]),
+
+            # Auto-refresh interval
+            dcc.Interval(id="interval-update", interval=30 * 1000, n_intervals=0),
         ],
         fluid=True,
+        style={"backgroundColor": "#0a0a0a", "minHeight": "100vh", "padding": "20px"}
     )
 
-    @app.callback(Output("interval", "disabled"), [Input("interval", "n_intervals")])
-    def update_chart(n):
-        return False
+    @app.callback(
+        [
+            Output("main-chart", "figure"),
+            Output("signals-table", "children"),
+            Output("status-alert", "children"),
+        ],
+        [
+            Input("refresh-button", "n_clicks"),
+            Input("interval-update", "n_intervals"),
+            Input("symbol-dropdown", "value"),
+            Input("exchange-dropdown", "value"),
+            Input("timeframe-dropdown", "value"),
+            Input("indicators-dropdown", "value"),
+            Input("oscillators-dropdown", "value"),
+        ],
+        prevent_initial_call=False
+    )
+    def update_dashboard(n_clicks, n_intervals, symbol, exchange, timeframe, indicators, oscillators):
+        """Обновление дашборда с реальными данными."""
+        try:
+            logger.info(f"Загрузка данных {symbol} {timeframe} от {exchange}")
+
+            # Получаем реальные данные
+            df = data_manager.get_ohlcv(symbol=symbol, timeframe=timeframe, limit=200, exchange_id=exchange)
+
+            if df is None or df.empty:
+                return create_empty_chart(), html.P("Нет данных"), f"⚠️ Нет данных для {symbol}"
+
+            # Генерируем сигналы
+            signals = signal_generator.generate_signals(symbol=symbol, timeframe=timeframe, limit=200)
+
+            # Создаем график с индикаторами
+            fig = create_live_chart(df, signals, symbol, timeframe, indicators or [], oscillators or [])
+
+            # Таблица сигналов
+            signals_table = create_signals_table(signals)
+
+            price = df['close'].iloc[-1]
+            timestamp = datetime.now().strftime("%H:%M:%S")
+            status = f"✅ {timestamp} | {exchange.upper()}: {symbol} ${price:,.2f} | Сигналов: {len(signals)}"
+
+            return fig, signals_table, status
+
+        except Exception as e:
+            logger.error(f"Ошибка дашборда: {e}", exc_info=True)
+            return create_empty_chart(), html.P("Ошибка"), f"❌ Ошибка: {str(e)}"
 
     return app
 
 
-def create_sample_chart():
-    """Создает примерный график."""
-    dates = pd.date_range("2024-01-01", periods=100, freq="15min")
-    prices = 50000 + np.cumsum(np.random.randn(100) * 100)
+def calculate_indicators(df: pd.DataFrame, indicators: list, oscillators: list):
+    """Вычисляет технические индикаторы."""
+    df = df.copy()
 
+    # Moving Averages
+    if 'ma' in indicators:
+        df['ma_20'] = df['close'].rolling(window=20).mean()
+        df['ma_50'] = df['close'].rolling(window=50).mean()
+        df['ma_200'] = df['close'].rolling(window=200).mean()
+
+    # EMA
+    if 'ema' in indicators:
+        df['ema_9'] = df['close'].ewm(span=9, adjust=False).mean()
+        df['ema_21'] = df['close'].ewm(span=21, adjust=False).mean()
+        df['ema_55'] = df['close'].ewm(span=55, adjust=False).mean()
+
+    # Bollinger Bands
+    if 'bb' in indicators:
+        df['bb_middle'] = df['close'].rolling(window=20).mean()
+        df['bb_std'] = df['close'].rolling(window=20).std()
+        df['bb_upper'] = df['bb_middle'] + (df['bb_std'] * 2)
+        df['bb_lower'] = df['bb_middle'] - (df['bb_std'] * 2)
+
+    # Support/Resistance (простой расчет на основе локальных минимумов/максимумов)
+    if 'sr' in indicators:
+        df['support'] = df['low'].rolling(window=20, center=True).min()
+        df['resistance'] = df['high'].rolling(window=20, center=True).max()
+
+    # RSI
+    if 'rsi' in oscillators:
+        delta = df['close'].diff()
+        gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
+        loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
+        rs = gain / loss
+        df['rsi'] = 100 - (100 / (1 + rs))
+
+    # MACD
+    if 'macd' in oscillators:
+        exp1 = df['close'].ewm(span=12, adjust=False).mean()
+        exp2 = df['close'].ewm(span=26, adjust=False).mean()
+        df['macd'] = exp1 - exp2
+        df['macd_signal'] = df['macd'].ewm(span=9, adjust=False).mean()
+        df['macd_hist'] = df['macd'] - df['macd_signal']
+
+    # Stochastic
+    if 'stoch' in oscillators:
+        low_14 = df['low'].rolling(window=14).min()
+        high_14 = df['high'].rolling(window=14).max()
+        df['stoch_k'] = 100 * ((df['close'] - low_14) / (high_14 - low_14))
+        df['stoch_d'] = df['stoch_k'].rolling(window=3).mean()
+
+    return df
+
+
+def create_live_chart(df: pd.DataFrame, signals: list, symbol: str, timeframe: str, indicators: list, oscillators: list):
+    """Создает реальный график с данными, сигналами и индикаторами."""
+    # Вычисляем индикаторы
+    df = calculate_indicators(df, indicators, oscillators)
+
+    # Определяем количество рядов для графика
+    num_oscillators = len(oscillators)
+    total_rows = 2 + num_oscillators  # price + volume + oscillators
+    row_heights = [0.5] + [0.15] * num_oscillators + [0.2]  # price, oscillators, volume
+
+    fig = make_subplots(
+        rows=total_rows, cols=1,
+        shared_xaxes=True,
+        vertical_spacing=0.02,
+        row_heights=row_heights,
+        subplot_titles=('Price & Indicators', *[osc.upper() for osc in oscillators], 'Volume')
+    )
+
+    # Candlestick
+    fig.add_trace(
+        go.Candlestick(
+            x=df.index, open=df['open'], high=df['high'], low=df['low'], close=df['close'],
+            name='Price', increasing_line_color='#00ff88', decreasing_line_color='#ff3366'
+        ), row=1, col=1
+    )
+
+    # === Добавляем индикаторы на график цены ===
+    # Moving Averages
+    if 'ma' in indicators:
+        fig.add_trace(go.Scatter(x=df.index, y=df['ma_20'], name='MA20', line=dict(color='#ffd700', width=1)), row=1, col=1)
+        fig.add_trace(go.Scatter(x=df.index, y=df['ma_50'], name='MA50', line=dict(color='#ff6347', width=1)), row=1, col=1)
+        fig.add_trace(go.Scatter(x=df.index, y=df['ma_200'], name='MA200', line=dict(color='#00bfff', width=1.5)), row=1, col=1)
+
+    # EMA
+    if 'ema' in indicators:
+        fig.add_trace(go.Scatter(x=df.index, y=df['ema_9'], name='EMA9', line=dict(color='#adff2f', width=1)), row=1, col=1)
+        fig.add_trace(go.Scatter(x=df.index, y=df['ema_21'], name='EMA21', line=dict(color='#ff69b4', width=1)), row=1, col=1)
+        fig.add_trace(go.Scatter(x=df.index, y=df['ema_55'], name='EMA55', line=dict(color='#9370db', width=1)), row=1, col=1)
+
+    # Bollinger Bands
+    if 'bb' in indicators:
+        fig.add_trace(go.Scatter(x=df.index, y=df['bb_upper'], name='BB Upper',
+                                line=dict(color='rgba(250,128,114,0.5)', width=1, dash='dash')), row=1, col=1)
+        fig.add_trace(go.Scatter(x=df.index, y=df['bb_middle'], name='BB Middle',
+                                line=dict(color='rgba(250,128,114,0.8)', width=1)), row=1, col=1)
+        fig.add_trace(go.Scatter(x=df.index, y=df['bb_lower'], name='BB Lower',
+                                line=dict(color='rgba(250,128,114,0.5)', width=1, dash='dash'),
+                                fill='tonexty', fillcolor='rgba(250,128,114,0.1)'), row=1, col=1)
+
+    # Support/Resistance
+    if 'sr' in indicators:
+        fig.add_trace(go.Scatter(x=df.index, y=df['support'], name='Support',
+                                line=dict(color='#00ff00', width=2, dash='dot')), row=1, col=1)
+        fig.add_trace(go.Scatter(x=df.index, y=df['resistance'], name='Resistance',
+                                line=dict(color='#ff0000', width=2, dash='dot')), row=1, col=1)
+
+    # === Добавляем сигналы ===
+    for signal in signals:
+        color = "#00ff88" if signal.signal_type == "LONG" else "#ff3366"
+        symbol_marker = "triangle-up" if signal.signal_type == "LONG" else "triangle-down"
+
+        signal_time = signal.timestamp
+        closest_idx = df.index[df.index.get_indexer([signal_time], method='nearest')[0]]
+
+        fig.add_trace(
+            go.Scatter(
+                x=[closest_idx], y=[signal.entry_price],
+                mode='markers',
+                marker=dict(symbol=symbol_marker, size=15, color=color, line=dict(color='white', width=2)),
+                name=f"{signal.signal_type}",
+                showlegend=True,
+                hovertemplate=f"<b>{signal.signal_type}</b><br>Entry: ${signal.entry_price:.2f}<br>" +
+                             f"TP: ${signal.take_profit:.2f}<br>SL: ${signal.stop_loss:.2f}<extra></extra>"
+            ), row=1, col=1
+        )
+
+        # TP/SL линии
+        fig.add_hline(y=signal.take_profit, line_dash="dash", line_color="green", opacity=0.5, row=1, col=1)
+        fig.add_hline(y=signal.stop_loss, line_dash="dash", line_color="red", opacity=0.5, row=1, col=1)
+
+    # === Добавляем осцилляторы ===
+    current_row = 2
+
+    # RSI
+    if 'rsi' in oscillators:
+        fig.add_trace(go.Scatter(x=df.index, y=df['rsi'], name='RSI', line=dict(color='#ffd700', width=2)),
+                     row=current_row, col=1)
+        fig.add_hline(y=70, line_dash="dash", line_color="red", opacity=0.5, row=current_row, col=1)
+        fig.add_hline(y=30, line_dash="dash", line_color="green", opacity=0.5, row=current_row, col=1)
+        fig.update_yaxes(title_text="RSI", range=[0, 100], row=current_row, col=1)
+        current_row += 1
+
+    # MACD
+    if 'macd' in oscillators:
+        fig.add_trace(go.Scatter(x=df.index, y=df['macd'], name='MACD', line=dict(color='#00bfff', width=2)),
+                     row=current_row, col=1)
+        fig.add_trace(go.Scatter(x=df.index, y=df['macd_signal'], name='Signal', line=dict(color='#ff6347', width=2)),
+                     row=current_row, col=1)
+        colors_macd = ['#00ff88' if val >= 0 else '#ff3366' for val in df['macd_hist']]
+        fig.add_trace(go.Bar(x=df.index, y=df['macd_hist'], name='Histogram', marker_color=colors_macd, opacity=0.5),
+                     row=current_row, col=1)
+        fig.update_yaxes(title_text="MACD", row=current_row, col=1)
+        current_row += 1
+
+    # Stochastic
+    if 'stoch' in oscillators:
+        fig.add_trace(go.Scatter(x=df.index, y=df['stoch_k'], name='%K', line=dict(color='#ffd700', width=2)),
+                     row=current_row, col=1)
+        fig.add_trace(go.Scatter(x=df.index, y=df['stoch_d'], name='%D', line=dict(color='#ff6347', width=2)),
+                     row=current_row, col=1)
+        fig.add_hline(y=80, line_dash="dash", line_color="red", opacity=0.5, row=current_row, col=1)
+        fig.add_hline(y=20, line_dash="dash", line_color="green", opacity=0.5, row=current_row, col=1)
+        fig.update_yaxes(title_text="Stochastic", range=[0, 100], row=current_row, col=1)
+        current_row += 1
+
+    # === Volume (всегда последний ряд) ===
+    colors = ['#00ff88' if c > o else '#ff3366' for c, o in zip(df['close'], df['open'])]
+    fig.add_trace(go.Bar(x=df.index, y=df['volume'], name='Volume', marker_color=colors, opacity=0.5),
+                 row=total_rows, col=1)
+    fig.update_yaxes(title_text="Volume", row=total_rows, col=1)
+
+    # === Настройки макета ===
+    chart_height = 600 + (num_oscillators * 150)
+    fig.update_layout(
+        title=dict(text=f"{symbol} - {timeframe}", font=dict(size=24, color="#00d4ff")),
+        template="plotly_dark", xaxis_rangeslider_visible=False, height=chart_height,
+        hovermode='x unified', plot_bgcolor='#0a0a0a', paper_bgcolor='#1e1e1e',
+        showlegend=True, legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+    )
+
+    # Настройка осей
+    for i in range(1, total_rows + 1):
+        fig.update_xaxes(showgrid=True, gridwidth=1, gridcolor='#2a2a2a', row=i, col=1)
+        fig.update_yaxes(showgrid=True, gridwidth=1, gridcolor='#2a2a2a', row=i, col=1)
+
+    return fig
+
+
+def create_signals_table(signals: list):
+    """Создает таблицу сигналов."""
+    if not signals:
+        return html.P("Нет активных сигналов", className="text-muted text-center p-4")
+
+    data = []
+    for signal in signals:
+        data.append({
+            "Time": signal.timestamp.strftime("%H:%M:%S"),
+            "Type": signal.signal_type,
+            "Entry": f"${signal.entry_price:,.2f}",
+            "TP": f"${signal.take_profit:.2f}",
+            "SL": f"${signal.stop_loss:.2f}",
+            "R:R": f"{signal.risk_reward_ratio:.2f}",
+            "Confidence": f"{signal.confidence:.1%}",
+        })
+
+    return dash_table.DataTable(
+        data=data,
+        columns=[{"name": col, "id": col} for col in data[0].keys()],
+        style_table={'overflowX': 'auto'},
+        style_cell={
+            'backgroundColor': '#1e1e1e', 'color': '#e0e0e0', 'border': '1px solid #333',
+            'textAlign': 'left', 'padding': '10px'
+        },
+        style_header={'backgroundColor': '#2a2a2a', 'fontWeight': 'bold'},
+        style_data_conditional=[
+            {'if': {'filter_query': '{Type} = "LONG"'}, 'backgroundColor': '#1a3d2e'},
+            {'if': {'filter_query': '{Type} = "SHORT"'}, 'backgroundColor': '#3d1a2e'},
+        ],
+        page_size=10,
+    )
+
+
+def create_empty_chart():
+    """Пустой график."""
     fig = go.Figure()
-    fig.add_trace(go.Scatter(x=dates, y=prices, mode="lines", name="Price", line={"color": "cyan", "width": 2}))
-    fig.update_layout(template="plotly_dark", title="Price Chart (Пример)", height=600)
+    fig.add_annotation(text="Нет данных", xref="paper", yref="paper", x=0.5, y=0.5,
+                      showarrow=False, font=dict(size=20, color="#888"))
+    fig.update_layout(template="plotly_dark", height=700, plot_bgcolor='#0a0a0a', paper_bgcolor='#1e1e1e')
     return fig
 
 
