@@ -445,30 +445,38 @@ def create_simple_app():
                 ], md=6),
             ], className="mb-4"),
 
-            # Main Chart
+            # Main Chart - NO LOADING ANIMATION for seamless real-time updates
             dbc.Row([
                 dbc.Col([
                     dbc.Card([
                         dbc.CardHeader(html.H5("📈 Price Chart & Signals", className="mb-0"),
                                       style={"backgroundColor": "#2a2a2a"}),
                         dbc.CardBody([
-                            dcc.Loading(
-                                id="loading-chart",
-                                children=[dcc.Graph(id="main-chart", style={"height": "700px"})]
+                            # Graph without Loading wrapper for seamless updates
+                            dcc.Graph(
+                                id="main-chart", 
+                                style={"height": "700px"},
+                                config={
+                                    'displayModeBar': True,
+                                    'scrollZoom': True,
+                                    'modeBarButtonsToRemove': ['lasso2d', 'select2d'],
+                                },
+                                # Prevent flickering on update
+                                animate=False,
                             ),
                         ]),
                     ], style={"backgroundColor": "#1e1e1e", "border": "1px solid #333"}),
                 ], width=12)
             ], className="mb-4"),
 
-            # Signals Table
+            # Signals Table - NO LOADING ANIMATION
             dbc.Row([
                 dbc.Col([
                     dbc.Card([
                         dbc.CardHeader(html.H5("🎯 Active Signals", className="mb-0"),
                                       style={"backgroundColor": "#2a2a2a"}),
                         dbc.CardBody([
-                            dcc.Loading(id="loading-signals", children=[html.Div(id="signals-table")]),
+                            html.Div(id="signals-table"),
                         ]),
                     ], style={"backgroundColor": "#1e1e1e", "border": "1px solid #333"}),
                 ], width=12)
@@ -801,7 +809,11 @@ def create_live_chart(df: pd.DataFrame, signals: list, symbol: str, timeframe: s
         title=dict(text=f"{symbol} - {timeframe}", font=dict(size=24, color="#00d4ff")),
         template="plotly_dark", xaxis_rangeslider_visible=False, height=chart_height,
         hovermode='x unified', plot_bgcolor='#0a0a0a', paper_bgcolor='#1e1e1e',
-        showlegend=True, legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+        showlegend=True, legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+        # Preserve zoom/pan state on updates
+        uirevision='constant',
+        # Smooth transitions
+        transition={'duration': 0},
     )
 
     # Настройка осей
@@ -851,7 +863,14 @@ def create_empty_chart():
     fig = go.Figure()
     fig.add_annotation(text="Нет данных", xref="paper", yref="paper", x=0.5, y=0.5,
                       showarrow=False, font=dict(size=20, color="#888"))
-    fig.update_layout(template="plotly_dark", height=700, plot_bgcolor='#0a0a0a', paper_bgcolor='#1e1e1e')
+    fig.update_layout(
+        template="plotly_dark", 
+        height=700, 
+        plot_bgcolor='#0a0a0a', 
+        paper_bgcolor='#1e1e1e',
+        uirevision='constant',
+        transition={'duration': 0},
+    )
     return fig
 
 
