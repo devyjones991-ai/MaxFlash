@@ -74,8 +74,84 @@ def create_simple_app():
     )
     app.title = "MaxFlash Dashboard"
 
+    # Добавляем кастомный CSS для dropdown меню
+    app.index_string = '''
+    <!DOCTYPE html>
+    <html>
+        <head>
+            {%metas%}
+            <title>{%title%}</title>
+            {%favicon%}
+            {%css%}
+            <style>
+                /* Стилизация dropdown меню */
+                .Select-control {
+                    background-color: #2a2a2a !important;
+                    border-color: #444 !important;
+                    color: #ffffff !important;
+                }
+                .Select-menu-outer {
+                    background-color: #2a2a2a !important;
+                    border-color: #444 !important;
+                }
+                .Select-option {
+                    background-color: #2a2a2a !important;
+                    color: #ffffff !important;
+                    padding: 10px !important;
+                }
+                .Select-option:hover {
+                    background-color: #00d4ff !important;
+                    color: #000000 !important;
+                }
+                .Select-value-label {
+                    color: #ffffff !important;
+                }
+                .Select-placeholder {
+                    color: #999 !important;
+                }
+                .Select-input > input {
+                    color: #ffffff !important;
+                }
+                /* Для нового react-select (v5+) */
+                div[class*="control"] {
+                    background-color: #2a2a2a !important;
+                    border-color: #444 !important;
+                }
+                div[class*="menu"] {
+                    background-color: #2a2a2a !important;
+                }
+                div[class*="option"] {
+                    background-color: #2a2a2a !important;
+                    color: #ffffff !important;
+                }
+                div[class*="option"]:hover {
+                    background-color: #00d4ff !important;
+                    color: #000000 !important;
+                }
+                div[class*="singleValue"],
+                div[class*="multiValue"],
+                div[class*="multiValueLabel"] {
+                    color: #ffffff !important;
+                }
+                div[class*="Input"] {
+                    color: #ffffff !important;
+                }
+            </style>
+        </head>
+        <body>
+            {%app_entry%}
+            <footer>
+                {%config%}
+                {%scripts%}
+                {%renderer%}
+            </footer>
+        </body>
+    </html>
+    '''
+
     app.layout = dbc.Container(
         [
+
             # Header
             dbc.Row([
                 dbc.Col([
@@ -100,17 +176,18 @@ def create_simple_app():
             # Controls Row 1
             dbc.Row([
                 dbc.Col([
-                    dbc.Label("Торговая пара:", className="fw-bold"),
+                    dbc.Label("Торговая пара:", className="fw-bold", style={"color": "#ffffff"}),
                     dcc.Dropdown(
                         id="symbol-dropdown",
                         options=[{"label": p, "value": p} for p in TOP_50_COINS],
                         value="BTC/USDT",
                         clearable=False,
                         searchable=True,
+                        style={"backgroundColor": "#1e1e1e", "color": "#ffffff"},
                     ),
                 ], md=4),
                 dbc.Col([
-                    dbc.Label("Биржа:", className="fw-bold"),
+                    dbc.Label("Биржа:", className="fw-bold", style={"color": "#ffffff"}),
                     dcc.Dropdown(
                         id="exchange-dropdown",
                         options=[
@@ -121,15 +198,17 @@ def create_simple_app():
                         ],
                         value="binance",
                         clearable=False,
+                        style={"backgroundColor": "#1e1e1e", "color": "#ffffff"},
                     ),
                 ], md=3),
                 dbc.Col([
-                    dbc.Label("Таймфрейм:", className="fw-bold"),
+                    dbc.Label("Таймфрейм:", className="fw-bold", style={"color": "#ffffff"}),
                     dcc.Dropdown(
                         id="timeframe-dropdown",
                         options=[{"label": tf, "value": tf} for tf in ["1m", "5m", "15m", "1h", "4h", "1d"]],
                         value="15m",
                         clearable=False,
+                        style={"backgroundColor": "#1e1e1e", "color": "#ffffff"},
                     ),
                 ], md=3),
                 dbc.Col([
@@ -141,7 +220,7 @@ def create_simple_app():
             # Controls Row 2 - Chart Indicators
             dbc.Row([
                 dbc.Col([
-                    dbc.Label("Индикаторы:", className="fw-bold"),
+                    dbc.Label("Индикаторы:", className="fw-bold", style={"color": "#ffffff"}),
                     dcc.Dropdown(
                         id="indicators-dropdown",
                         options=[
@@ -153,10 +232,11 @@ def create_simple_app():
                         ],
                         value=["ma"],
                         multi=True,
+                        style={"backgroundColor": "#1e1e1e", "color": "#ffffff"},
                     ),
                 ], md=6),
                 dbc.Col([
-                    dbc.Label("Осцилляторы:", className="fw-bold"),
+                    dbc.Label("Осцилляторы:", className="fw-bold", style={"color": "#ffffff"}),
                     dcc.Dropdown(
                         id="oscillators-dropdown",
                         options=[
@@ -166,6 +246,7 @@ def create_simple_app():
                         ],
                         value=[],
                         multi=True,
+                        style={"backgroundColor": "#1e1e1e", "color": "#ffffff"},
                     ),
                 ], md=6),
             ], className="mb-4"),
