@@ -46,8 +46,8 @@ class SignalGenerator:
     def __init__(
         self,
         data_manager: Optional[MarketDataManager] = None,
-        min_confidence: float = 0.6,
-        min_confluence: int = 3,
+        min_confidence: float = 0.4,  # Понизил для большего количества сигналов
+        min_confluence: int = 2,      # Снизил требуемое количество подтверждений
         use_ml_ensemble: bool = True
     ):
         """
@@ -125,10 +125,12 @@ class SignalGenerator:
             
             # Генерируем Smart Money сигналы
             smc_signals = self._analyze_and_generate_signals(df, symbol, timeframe)
+            logger.info(f"SMC сгенерировал {len(smc_signals)} сигналов для {symbol}")
             
             # Если есть ML Ensemble, комбинируем с его предсказаниями
             if self.ensemble and self.use_ml_ensemble:
                 smc_signals = self._enhance_with_ml_ensemble(smc_signals, df, symbol, timeframe)
+                logger.info(f"После ML Ensemble: {len(smc_signals)} сигналов")
             
             # Фильтруем по минимальной уверенности
             filtered_signals = [
@@ -137,7 +139,7 @@ class SignalGenerator:
             ]
             
             logger.info(
-                f"Сгенерировано {len(filtered_signals)} сигналов для {symbol} "
+                f"После фильтрации (min_conf={self.min_confidence}): {len(filtered_signals)} сигналов для {symbol} "
                 f"(ML: {'enabled' if self.ensemble else 'disabled'})"
             )
             

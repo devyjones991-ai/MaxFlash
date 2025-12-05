@@ -367,9 +367,15 @@ def create_simple_app():
                     dbc.Alert(
                         id="status-alert",
                         children=[
-                            html.Span("🔴 ", id="live-indicator", style={
+                            html.Span("🟢 ", id="live-indicator", style={
                                 "animation": "pulse 1s infinite",
                                 "display": "inline-block"
+                            }),
+                            html.Span(id="realtime-clock", style={
+                                "color": "#00ff00", 
+                                "fontWeight": "bold",
+                                "marginRight": "10px",
+                                "fontFamily": "monospace"
                             }),
                             html.Span("Dashboard загружается...", id="status-text")
                         ],
@@ -497,8 +503,11 @@ def create_simple_app():
                 ], width=12)
             ]),
 
-            # Auto-refresh interval - Real-time update every 10 seconds
-            dcc.Interval(id="interval-update", interval=10 * 1000, n_intervals=0),
+            # Auto-refresh interval - Real-time update every 5 seconds
+            dcc.Interval(id="interval-update", interval=5 * 1000, n_intervals=0),
+            
+            # Fast clock interval - every 1 second for real-time clock
+            dcc.Interval(id="clock-interval", interval=1000, n_intervals=0),
             
             # Store for caching previous data (for incremental updates)
             dcc.Store(id="cache-store", data={"last_symbol": None, "last_price": None}),
@@ -549,26 +558,6 @@ def create_simple_app():
         global _dashboard_cache  # Use module-level cache
         
         try:
-            # Prevent concurrent updates
-            if _dashboard_cache.get('is_updating', False):
-                # Return cached data if available
-                if _dashboard_cache.get('last_df') is not None:
-                    df = _dashboard_cache['last_df']
-                    signals = _dashboard_cache.get('signals_cache', [])
-                    fig = create_live_chart(df, signals, symbol, timeframe, indicators or [], oscillators or [])
-                    price = df['close'].iloc[-1]
-                    timestamp = datetime.now().strftime("%H:%M:%S")
-                    status_content = [
-                        html.Span(className="live-dot"),
-                        html.Span("LIVE ", style={"color": "#00ff00", "fontWeight": "bold"}),
-                        html.Span(f"{timestamp} | {symbol} ${price:,.2f}")
-                    ]
-                    return fig, create_signals_table(signals), status_content
-                else:
-                    raise dash.exceptions.PreventUpdate
-            
-            _dashboard_cache['is_updating'] = True
-            
             # Определяем что вызвало callback
             ctx = dash.callback_context
             trigger_id = ctx.triggered[0]['prop_id'].split('.')[0] if ctx.triggered else 'interval-update'
@@ -580,20 +569,17 @@ def create_simple_app():
                 _dashboard_cache['last_timeframe'] != timeframe
             )
             
-            # Принудительное обновление только при:
-            # 1. Изменении параметров
-            # 2. Нажатии кнопки обновления
-            force_refresh = params_changed or trigger_id == 'refresh-button'
-            
+            # При смене параметров - ВСЕГДА загружаем новые данные
             if params_changed:
                 logger.info(f"Параметры изменены: {symbol} {timeframe} от {exchange}")
-                _dashboard_cache['signal_update_counter'] = 0
-                # Очищаем кэш сигналов при смене параметров
                 _dashboard_cache['signals_cache'] = []
-                # Обновляем кэш СРАЗУ при смене параметров
                 _dashboard_cache['last_symbol'] = symbol
                 _dashboard_cache['last_exchange'] = exchange
                 _dashboard_cache['last_timeframe'] = timeframe
+                _dashboard_cache['last_df'] = None  # Сбрасываем кэш данных!
+            
+            # Принудительное обновление при смене параметров или кнопке
+            force_refresh = params_changed or trigger_id == 'refresh-button'
             
             # Получаем данные
             df = data_manager.get_ohlcv(
@@ -654,11 +640,9 @@ def create_simple_app():
                 html.Span(f" | Сигналов: {len(signals)}", style={"color": "#888", "marginLeft": "10px"}),
             ]
 
-            _dashboard_cache['is_updating'] = False
             return fig, signals_table, status_content
 
         except Exception as e:
-            _dashboard_cache['is_updating'] = False
             logger.error(f"Ошибка дашборда: {e}", exc_info=True)
             status_content = [
                 html.Span("❌ ", style={"color": "#ff3366"}),
@@ -744,6 +728,25 @@ def create_simple_app():
         except Exception as e:
             logger.error(f"Ошибка генерации сигнала: {e}")
             return html.P(f"Ошибка: {str(e)}", style={"color": "#ff3366"}), True, "❌ Ошибка", "danger"
+
+    # Clientside callback для realtime часов (без задержки!)
+    app.clientside_callback(
+        """
+        function(n_intervals) {
+            if (n_intervals === undefined || n_intervals === null) {
+                return window.dash_clientside.no_update;
+            }
+            var now = new Date();
+            var hours = String(now.getHours()).padStart(2, '0');
+            var mins = String(now.getMinutes()).padStart(2, '0');
+            var secs = String(now.getSeconds()).padStart(2, '0');
+            return hours + ':' + mins + ':' + secs;
+        }
+        """,
+        Output("realtime-clock", "children"),
+        Input("clock-interval", "n_intervals"),
+        prevent_initial_call=True
+    )
 
     return app
 
