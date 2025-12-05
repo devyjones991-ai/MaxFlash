@@ -31,7 +31,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from utils.market_data_manager import MarketDataManager
-from utils.signal_generator import SignalGenerator
+from utils.signal_scanner import SignalScanner
 from utils.logger_config import setup_logging
 
 logger = setup_logging()
@@ -41,7 +41,7 @@ BOT_TOKEN = "7865140777:AAEyYsYcqjey_6_cBOQOAq2I2kQxGRt5kek"
 
 # Инициализация менеджеров
 data_manager = MarketDataManager()
-signal_generator = SignalGenerator(data_manager=data_manager, min_confidence=0.4)
+signal_scanner = SignalScanner(data_manager=data_manager)  # Независимый сканер
 
 # Популярные пары
 POPULAR_PAIRS = ["BTC/USDT", "ETH/USDT", "SOL/USDT", "XRP/USDT", "BNB/USDT"]
@@ -54,15 +54,19 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Приветственное сообщение с главным меню."""
     keyboard = [
         [
-            InlineKeyboardButton("📊 Цена BTC", callback_data="price_BTC/USDT"),
-            InlineKeyboardButton("📊 Цена ETH", callback_data="price_ETH/USDT"),
+            InlineKeyboardButton("📊 BTC", callback_data="price_BTC/USDT"),
+            InlineKeyboardButton("📊 ETH", callback_data="price_ETH/USDT"),
+            InlineKeyboardButton("📊 SOL", callback_data="price_SOL/USDT"),
         ],
         [
             InlineKeyboardButton("🎯 Сигнал BTC", callback_data="signal_BTC/USDT"),
             InlineKeyboardButton("🎯 Сигнал ETH", callback_data="signal_ETH/USDT"),
         ],
         [
-            InlineKeyboardButton("🔝 Топ-5 монет", callback_data="top5"),
+            InlineKeyboardButton("🔍 СКАН ВСЕХ 50", callback_data="scan_all"),
+        ],
+        [
+            InlineKeyboardButton("🔝 Топ-5", callback_data="top5"),
             InlineKeyboardButton("📈 Статус", callback_data="status"),
         ],
     ]
@@ -71,14 +75,14 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     welcome_text = """
 🚀 *MaxFlash Trading Bot*
 
-Добро пожаловать! Я помогу тебе отслеживать рынок криптовалют.
+Добро пожаловать! Я сканирую топ-50 криптовалют.
 
 *Команды:*
 /price `BTC` - Текущая цена
 /signal `ETH` - Торговый сигнал
+/scan - 🔍 *Сканировать все 50 монет*
 /top - Топ монет за 24ч
 /alert `BTC 100000` - Установить алерт
-/status - Статус системы
 
 Или используй кнопки ниже 👇
 """
@@ -177,17 +181,15 @@ async def get_signal(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def _send_signal(message, symbol: str):
-    """Отправляет сигнал для указанного символа."""
+    """Отправляет сигнал для указанного символа (независимый сканер!)."""
     try:
         # Отправляем сообщение о генерации
         status_msg = await message.reply_text(f"⏳ Анализирую {symbol}...")
         
-        # Генерируем сигнал
-        signals = signal_generator.generate_signals(symbol=symbol, timeframe="15m", limit=200)
+        # Используем независимый сканер
+        signal = signal_scanner.scan_single(symbol)
         
-        if signals:
-            signal = signals[0]
-            
+        if signal:
             if signal.signal_type == "LONG":
                 emoji = "🟢"
                 direction = "LONG (Покупка)"
@@ -195,25 +197,23 @@ async def _send_signal(message, symbol: str):
                 emoji = "🔴"
                 direction = "SHORT (Продажа)"
             
-            # Рассчитываем Risk/Reward
-            risk = abs(signal.entry_price - signal.stop_loss)
-            reward = abs(signal.take_profit - signal.entry_price)
-            rr_ratio = reward / risk if risk > 0 else 0
+            # Risk/Reward
+            rr_ratio = signal.risk_reward
             
             text = f"""
 {emoji} *СИГНАЛ {direction}*
 
-📍 *{symbol}* (15m)
+📍 *{symbol}* ({signal.timeframe})
 
-🎯 Entry: `${signal.entry_price:,.2f}`
-✅ Take Profit: `${signal.take_profit:,.2f}`
-🛑 Stop Loss: `${signal.stop_loss:,.2f}`
+🎯 Entry: `${signal.entry_price:,.4f}`
+✅ Take Profit: `${signal.take_profit:,.4f}`
+🛑 Stop Loss: `${signal.stop_loss:,.4f}`
 
 📊 Confidence: `{signal.confidence:.0%}`
 ⚖️ Risk/Reward: `1:{rr_ratio:.1f}`
 
 📋 *Индикаторы:*
-{' • '.join(signal.indicators[:4])}
+✓ {' • '.join(signal.indicators[:4])}
 
 ⚠️ _Это не финансовый совет. Торгуйте ответственно._
 """
@@ -231,17 +231,17 @@ async def _send_signal(message, symbol: str):
             text = f"""
 ⏸️ *Нет сигнала*
 
-📍 {symbol} (15m)
+📍 {symbol}
 
 В данный момент нет чётких торговых сигналов. 
-Рынок находится в состоянии консолидации или условия не соответствуют критериям входа.
+Условия не соответствуют критериям входа.
 
-💡 _Попробуйте позже или проверьте другую пару._
+💡 _Попробуйте /scan для поиска сигналов по всем монетам._
 """
             keyboard = [
                 [
                     InlineKeyboardButton("🔄 Обновить", callback_data=f"signal_{symbol}"),
-                    InlineKeyboardButton("📊 Цена", callback_data=f"price_{symbol}"),
+                    InlineKeyboardButton("🔍 Скан всех", callback_data="scan_all"),
                 ]
             ]
             reply_markup = InlineKeyboardMarkup(keyboard)
@@ -353,6 +353,50 @@ async def set_alert(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("❌ Неверный формат цены")
 
 
+async def scan_all_coins(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Сканирование всех 50 монет для поиска сигналов."""
+    await _send_scan_results(update.message)
+
+
+async def _send_scan_results(message):
+    """Сканирует все монеты и отправляет результаты."""
+    try:
+        status_msg = await message.reply_text("🔍 Сканирую 50 монет... Это займёт ~30 сек.")
+        
+        # Сканируем все монеты
+        signals = signal_scanner.scan_all()
+        
+        if signals:
+            # Топ-10 сигналов
+            top_signals = signals[:10]
+            
+            text = f"🔍 *Найдено {len(signals)} сигналов*\n\n"
+            
+            for i, s in enumerate(top_signals, 1):
+                emoji = "🟢" if s.signal_type == "LONG" else "🔴"
+                symbol_short = s.symbol.replace('/USDT', '')
+                text += f"{i}. {emoji} *{symbol_short}* `${s.entry_price:,.4f}` ({s.confidence:.0%})\n"
+                text += f"   TP: `${s.take_profit:,.4f}` | SL: `${s.stop_loss:,.4f}`\n"
+            
+            if len(signals) > 10:
+                text += f"\n_...и ещё {len(signals) - 10} сигналов_"
+            
+            text += "\n\n💡 Для деталей: /signal `SYMBOL`"
+            
+            await status_msg.edit_text(text, parse_mode='Markdown')
+        else:
+            await status_msg.edit_text(
+                "⏸️ *Нет сигналов*\n\n"
+                "В данный момент нет чётких торговых сигналов по топ-50 монетам.\n"
+                "Рынок в состоянии неопределённости.",
+                parse_mode='Markdown'
+            )
+            
+    except Exception as e:
+        logger.error(f"Ошибка сканирования: {e}")
+        await message.reply_text(f"❌ Ошибка: {str(e)}")
+
+
 async def get_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Статус системы."""
     await _send_status(update.message)
@@ -452,6 +496,10 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
     elif data == "status":
         await _send_status(query.message)
+    
+    elif data == "scan_all":
+        await query.message.edit_text("🔍 Сканирую 50 монет...")
+        await _send_scan_results(query.message)
 
 
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -511,6 +559,7 @@ def main():
     application.add_handler(CommandHandler("signal", get_signal))
     application.add_handler(CommandHandler("s", get_signal))  # Короткая версия
     application.add_handler(CommandHandler("top", get_top))
+    application.add_handler(CommandHandler("scan", scan_all_coins))  # Сканирование всех монет
     application.add_handler(CommandHandler("alert", set_alert))
     application.add_handler(CommandHandler("status", get_status))
     

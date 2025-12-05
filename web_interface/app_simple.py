@@ -34,6 +34,7 @@ try:
 
     from utils.market_data_manager import MarketDataManager
     from utils.signal_generator import SignalGenerator
+    from utils.signal_scanner import SignalScanner, get_scanner
     from utils.logger_config import setup_logging
 
     HAS_DEPS = True
@@ -42,6 +43,7 @@ try:
     # Инициализация менеджеров
     data_manager = MarketDataManager()
     signal_generator = SignalGenerator(data_manager=data_manager)
+    signal_scanner = SignalScanner(data_manager=data_manager)  # Независимый сканер
 
     # Топ 50 криптовалют по рыночной капитализации
     TOP_50_COINS = [
@@ -427,7 +429,8 @@ def create_simple_app():
                     dbc.Label("\u00A0", className="fw-bold"),
                     dbc.ButtonGroup([
                         dbc.Button("🔄", id="refresh-button", color="primary", title="Обновить данные"),
-                        dbc.Button("🎯 Сигнал", id="generate-signal-btn", color="success", title="Сгенерировать сигнал"),
+                        dbc.Button("🎯", id="generate-signal-btn", color="success", title="Сигнал для текущей пары"),
+                        dbc.Button("🔍 Скан", id="scan-all-btn", color="warning", title="Сканировать все 50 монет"),
                     ], className="w-100"),
                 ], md=2),
             ], className="mb-3"),
@@ -666,24 +669,17 @@ def create_simple_app():
         prevent_initial_call=True
     )
     def generate_signal_on_click(n_clicks, symbol, timeframe):
-        """Генерация сигнала по клику на кнопку."""
+        """Генерация сигнала по клику - использует независимый сканер!"""
         if not n_clicks:
             return "", False, "", "info"
         
         try:
-            # Генерируем сигналы
-            signals = signal_generator.generate_signals(
-                symbol=symbol,
-                timeframe=timeframe,
-                limit=200
-            )
+            # Используем независимый сканер (не привязан к настройкам графика!)
+            signal = signal_scanner.scan_single(symbol)
             
-            if signals:
-                signal = signals[0]  # Берём первый (самый сильный) сигнал
-                signal_type = signal.signal_type
-                
+            if signal:
                 # Определяем цвет и иконку
-                if signal_type == "LONG":
+                if signal.signal_type == "LONG":
                     icon = "success"
                     header = "🟢 LONG Сигнал!"
                     bg_color = "#1a3d2e"
@@ -692,41 +688,102 @@ def create_simple_app():
                     header = "🔴 SHORT Сигнал!"
                     bg_color = "#3d1a2e"
                 
+                # Расчёт R/R
+                rr = signal.risk_reward
+                
                 content = html.Div([
                     html.P([
                         html.Strong(f"{symbol}"),
-                        html.Span(f" ({timeframe})", style={"color": "#888"})
+                        html.Span(f" ({signal.timeframe})", style={"color": "#888"})
                     ]),
                     html.Hr(style={"margin": "8px 0", "borderColor": "#444"}),
                     html.Div([
                         html.Span("Entry: ", style={"color": "#888"}),
-                        html.Strong(f"${signal.entry_price:,.2f}", style={"color": "#00d4ff"}),
+                        html.Strong(f"${signal.entry_price:,.4f}", style={"color": "#00d4ff"}),
                     ]),
                     html.Div([
                         html.Span("TP: ", style={"color": "#888"}),
-                        html.Strong(f"${signal.take_profit:,.2f}", style={"color": "#00ff88"}),
+                        html.Strong(f"${signal.take_profit:,.4f}", style={"color": "#00ff88"}),
                     ]),
                     html.Div([
                         html.Span("SL: ", style={"color": "#888"}),
-                        html.Strong(f"${signal.stop_loss:,.2f}", style={"color": "#ff3366"}),
+                        html.Strong(f"${signal.stop_loss:,.4f}", style={"color": "#ff3366"}),
                     ]),
                     html.Div([
                         html.Span("Confidence: ", style={"color": "#888"}),
-                        html.Strong(f"{signal.confidence:.1%}", style={"color": "#ffd700"}),
+                        html.Strong(f"{signal.confidence:.0%}", style={"color": "#ffd700"}),
+                        html.Span(f"  R/R: ", style={"color": "#888", "marginLeft": "10px"}),
+                        html.Strong(f"1:{rr:.1f}", style={"color": "#00d4ff"}),
                     ], style={"marginTop": "5px"}),
                     html.Div([
-                        html.Small(f"Индикаторы: {', '.join(signal.indicators[:3])}", 
-                                  style={"color": "#666", "fontSize": "11px"})
+                        html.Small(f"✓ {' • '.join(signal.indicators[:4])}", 
+                                  style={"color": "#4CAF50", "fontSize": "11px"})
                     ], style={"marginTop": "8px"}),
                 ], style={"backgroundColor": bg_color, "padding": "10px", "borderRadius": "5px"})
                 
                 return content, True, header, icon
             else:
-                return html.P("Нет сигналов на данный момент. Попробуйте другую пару или таймфрейм.", 
-                             style={"color": "#888"}), True, "ℹ️ Нет сигналов", "info"
+                return html.P(
+                    "Нет чёткого сигнала для этой пары. Условия не соответствуют критериям входа.", 
+                    style={"color": "#888"}
+                ), True, "ℹ️ Нет сигнала", "info"
                 
         except Exception as e:
-            logger.error(f"Ошибка генерации сигнала: {e}")
+            logger.error(f"Ошибка генерации сигнала: {e}", exc_info=True)
+            return html.P(f"Ошибка: {str(e)}", style={"color": "#ff3366"}), True, "❌ Ошибка", "danger"
+
+    # Callback для сканирования ВСЕХ монет
+    @app.callback(
+        [
+            Output("signal-toast", "children", allow_duplicate=True),
+            Output("signal-toast", "is_open", allow_duplicate=True),
+            Output("signal-toast", "header", allow_duplicate=True),
+            Output("signal-toast", "icon", allow_duplicate=True),
+        ],
+        [Input("scan-all-btn", "n_clicks")],
+        prevent_initial_call=True
+    )
+    def scan_all_coins(n_clicks):
+        """Сканирование всех 50 монет для поиска сигналов."""
+        if not n_clicks:
+            return "", False, "", "info"
+        
+        try:
+            # Сканируем все монеты
+            signals = signal_scanner.scan_all()
+            
+            if signals:
+                # Берём топ-5 лучших сигналов
+                top_signals = signals[:5]
+                
+                content = html.Div([
+                    html.P([
+                        html.Strong(f"Найдено {len(signals)} сигналов"),
+                        html.Span(" (топ-5 показаны)", style={"color": "#888"})
+                    ], style={"marginBottom": "10px"}),
+                    html.Hr(style={"margin": "8px 0", "borderColor": "#444"}),
+                ] + [
+                    html.Div([
+                        html.Span(
+                            "🟢 " if s.signal_type == "LONG" else "🔴 ",
+                            style={"fontWeight": "bold"}
+                        ),
+                        html.Strong(s.symbol.replace('/USDT', '')),
+                        html.Span(f" ${s.entry_price:,.4f}", style={"color": "#00d4ff", "marginLeft": "5px"}),
+                        html.Span(f" ({s.confidence:.0%})", style={"color": "#ffd700", "marginLeft": "5px"}),
+                    ], style={"marginBottom": "5px"})
+                    for s in top_signals
+                ])
+                
+                return content, True, f"🔍 Найдено {len(signals)} сигналов", "success"
+            else:
+                return html.P(
+                    "Нет сигналов в данный момент. Рынок в состоянии неопределённости.",
+                    style={"color": "#888"}
+                ), True, "ℹ️ Нет сигналов", "info"
+                
+        except Exception as e:
+            logger.error(f"Ошибка сканирования: {e}", exc_info=True)
             return html.P(f"Ошибка: {str(e)}", style={"color": "#ff3366"}), True, "❌ Ошибка", "danger"
 
     # Clientside callback для realtime часов (без задержки!)
