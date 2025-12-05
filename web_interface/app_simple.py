@@ -9,6 +9,18 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
+# Global cache for dashboard updates - MUST be at module level
+_dashboard_cache = {
+    'last_symbol': None,
+    'last_exchange': None,
+    'last_timeframe': None,
+    'last_df': None,
+    'last_update': None,
+    'signals_cache': [],
+    'signal_update_counter': 0,
+    'is_updating': False,  # Prevent concurrent updates
+}
+
 try:
     from datetime import datetime
 
@@ -485,8 +497,8 @@ def create_simple_app():
                 ], width=12)
             ]),
 
-            # Auto-refresh interval - Real-time update every 3 seconds
-            dcc.Interval(id="interval-update", interval=3 * 1000, n_intervals=0),
+            # Auto-refresh interval - Real-time update every 10 seconds
+            dcc.Interval(id="interval-update", interval=10 * 1000, n_intervals=0),
             
             # Store for caching previous data (for incremental updates)
             dcc.Store(id="cache-store", data={"last_symbol": None, "last_price": None}),
@@ -506,16 +518,7 @@ def create_simple_app():
         style={"backgroundColor": "#0a0a0a", "minHeight": "100vh", "padding": "20px"}
     )
 
-    # Cache for optimized updates - use mutable default to persist between calls
-    _dashboard_cache = {
-        'last_symbol': None,
-        'last_exchange': None,
-        'last_timeframe': None,
-        'last_df': None,
-        'last_update': None,
-        'signals_cache': [],
-        'signal_update_counter': 0,
-    }
+    # Note: Cache is defined at module level to persist between callbacks
 
     @app.callback(
         [
@@ -543,7 +546,33 @@ def create_simple_app():
         - Быстрое обновление цены каждые 3 секунды
         - Генерация сигналов каждые 5 обновлений (15 сек)
         """
+        global _dashboard_cache  # Use module-level cache
+        
         try:
+            # Prevent concurrent updates
+            if _dashboard_cache.get('is_updating', False):
+                # Return cached data if available
+                if _dashboard_cache.get('last_df') is not None:
+                    df = _dashboard_cache['last_df']
+                    signals = _dashboard_cache.get('signals_cache', [])
+                    fig = create_live_chart(df, signals, symbol, timeframe, indicators or [], oscillators or [])
+                    price = df['close'].iloc[-1]
+                    timestamp = datetime.now().strftime("%H:%M:%S")
+                    status_content = [
+                        html.Span(className="live-dot"),
+                        html.Span("LIVE ", style={"color": "#00ff00", "fontWeight": "bold"}),
+                        html.Span(f"{timestamp} | {symbol} ${price:,.2f}")
+                    ]
+                    return fig, create_signals_table(signals), status_content
+                else:
+                    raise dash.exceptions.PreventUpdate
+            
+            _dashboard_cache['is_updating'] = True
+            
+            # Определяем что вызвало callback
+            ctx = dash.callback_context
+            trigger_id = ctx.triggered[0]['prop_id'].split('.')[0] if ctx.triggered else 'interval-update'
+            
             # Проверяем, изменились ли параметры (symbol, exchange, timeframe)
             params_changed = (
                 _dashboard_cache['last_symbol'] != symbol or
@@ -551,22 +580,28 @@ def create_simple_app():
                 _dashboard_cache['last_timeframe'] != timeframe
             )
             
-            # Принудительное обновление при изменении параметров ИЛИ нажатии кнопки
-            force_refresh = params_changed or (n_clicks is not None and n_clicks > 0)
+            # Принудительное обновление только при:
+            # 1. Изменении параметров
+            # 2. Нажатии кнопки обновления
+            force_refresh = params_changed or trigger_id == 'refresh-button'
             
             if params_changed:
                 logger.info(f"Параметры изменены: {symbol} {timeframe} от {exchange}")
                 _dashboard_cache['signal_update_counter'] = 0
                 # Очищаем кэш сигналов при смене параметров
                 _dashboard_cache['signals_cache'] = []
+                # Обновляем кэш СРАЗУ при смене параметров
+                _dashboard_cache['last_symbol'] = symbol
+                _dashboard_cache['last_exchange'] = exchange
+                _dashboard_cache['last_timeframe'] = timeframe
             
-            # Получаем данные - ВСЕГДА обновляем для real-time
+            # Получаем данные
             df = data_manager.get_ohlcv(
                 symbol=symbol, 
                 timeframe=timeframe, 
                 limit=200, 
                 exchange_id=exchange,
-                force_refresh=force_refresh  # True при смене параметров
+                force_refresh=force_refresh
             )
 
             if df is None or df.empty:
@@ -576,25 +611,13 @@ def create_simple_app():
                 ]
                 return create_empty_chart(), html.P("Нет данных"), status_content
 
-            # Обновляем кэш
-            _dashboard_cache['last_symbol'] = symbol
-            _dashboard_cache['last_exchange'] = exchange
-            _dashboard_cache['last_timeframe'] = timeframe
+            # Обновляем кэш данных
             _dashboard_cache['last_df'] = df
             _dashboard_cache['last_update'] = datetime.now()
             
-            # Генерируем сигналы каждые 5 обновлений (15 сек) или при изменении параметров
-            _dashboard_cache['signal_update_counter'] += 1
-            if params_changed or _dashboard_cache['signal_update_counter'] >= 5:
-                signals = signal_generator.generate_signals(
-                    symbol=symbol, 
-                    timeframe=timeframe, 
-                    limit=200
-                )
-                _dashboard_cache['signals_cache'] = signals
-                _dashboard_cache['signal_update_counter'] = 0
-            else:
-                signals = _dashboard_cache['signals_cache']
+            # Генерируем сигналы только по запросу (через отдельную кнопку)
+            # чтобы не блокировать основной callback
+            signals = _dashboard_cache.get('signals_cache', [])
 
             # Создаем график с индикаторами
             fig = create_live_chart(df, signals, symbol, timeframe, indicators or [], oscillators or [])
@@ -631,9 +654,11 @@ def create_simple_app():
                 html.Span(f" | Сигналов: {len(signals)}", style={"color": "#888", "marginLeft": "10px"}),
             ]
 
+            _dashboard_cache['is_updating'] = False
             return fig, signals_table, status_content
 
         except Exception as e:
+            _dashboard_cache['is_updating'] = False
             logger.error(f"Ошибка дашборда: {e}", exc_info=True)
             status_content = [
                 html.Span("❌ ", style={"color": "#ff3366"}),
