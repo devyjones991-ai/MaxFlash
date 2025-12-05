@@ -84,57 +84,243 @@ def create_simple_app():
             {%favicon%}
             {%css%}
             <style>
-                /* Стилизация dropdown меню */
-                .Select-control {
-                    background-color: #2a2a2a !important;
-                    border-color: #444 !important;
+                /* === LIVE INDICATOR ANIMATION === */
+                @keyframes pulse {
+                    0% { opacity: 1; transform: scale(1); }
+                    50% { opacity: 0.5; transform: scale(1.2); }
+                    100% { opacity: 1; transform: scale(1); }
+                }
+                
+                @keyframes glow {
+                    0% { box-shadow: 0 0 5px #00ff00; }
+                    50% { box-shadow: 0 0 20px #00ff00, 0 0 30px #00ff00; }
+                    100% { box-shadow: 0 0 5px #00ff00; }
+                }
+                
+                .live-dot {
+                    display: inline-block;
+                    width: 10px;
+                    height: 10px;
+                    background-color: #00ff00;
+                    border-radius: 50%;
+                    margin-right: 8px;
+                    animation: pulse 1s infinite, glow 2s infinite;
+                }
+
+                /* === DROPDOWN DARK THEME - COMPLETE FIX === */
+                
+                /* Base Dash Dropdown Styling */
+                .dash-dropdown {
+                    background-color: #1a1a1a !important;
+                }
+                
+                .dash-dropdown .Select-control {
+                    background-color: #1a1a1a !important;
+                    border: 1px solid #444 !important;
                     color: #ffffff !important;
                 }
-                .Select-menu-outer {
-                    background-color: #2a2a2a !important;
-                    border-color: #444 !important;
+                
+                .dash-dropdown .Select-menu-outer {
+                    background-color: #1a1a1a !important;
+                    border: 1px solid #444 !important;
+                    z-index: 9999 !important;
                 }
-                .Select-option {
-                    background-color: #2a2a2a !important;
+                
+                .dash-dropdown .Select-menu {
+                    background-color: #1a1a1a !important;
+                    max-height: 300px !important;
+                }
+                
+                .dash-dropdown .Select-option {
+                    background-color: #1a1a1a !important;
                     color: #ffffff !important;
+                    padding: 10px 12px !important;
+                }
+                
+                .dash-dropdown .Select-option:hover,
+                .dash-dropdown .Select-option.is-focused {
+                    background-color: #00d4ff !important;
+                    color: #000000 !important;
+                }
+                
+                .dash-dropdown .Select-option.is-selected {
+                    background-color: #006080 !important;
+                    color: #ffffff !important;
+                }
+                
+                .dash-dropdown .Select-value-label,
+                .dash-dropdown .Select-value {
+                    color: #ffffff !important;
+                }
+                
+                .dash-dropdown .Select-placeholder {
+                    color: #888 !important;
+                }
+                
+                .dash-dropdown .Select-input input {
+                    color: #ffffff !important;
+                }
+                
+                .dash-dropdown .Select-arrow {
+                    border-color: #888 transparent transparent !important;
+                }
+                
+                .dash-dropdown .Select.is-open .Select-arrow {
+                    border-color: transparent transparent #888 !important;
+                }
+
+                /* React-Select v5+ (VirtualizedSelect) - ENHANCED */
+                .Select-control,
+                div[class$="-control"],
+                div[class*="-control "] {
+                    background-color: #1a1a1a !important;
+                    border-color: #444 !important;
+                    min-height: 38px !important;
+                    box-shadow: none !important;
+                }
+                
+                div[class$="-control"]:hover {
+                    border-color: #00d4ff !important;
+                }
+
+                /* Menu Container */
+                .Select-menu-outer,
+                div[class$="-menu"],
+                div[class*="-menu "] {
+                    background-color: #1a1a1a !important;
+                    border: 1px solid #444 !important;
+                    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.6) !important;
+                    z-index: 9999 !important;
+                    margin-top: 4px !important;
+                }
+
+                /* Menu List (scrollable area) */
+                div[class$="-MenuList"],
+                div[class*="-MenuList "],
+                div[class$="-menuList"],
+                div[class*="-menuList "] {
+                    background-color: #1a1a1a !important;
+                    padding: 4px !important;
+                    max-height: 300px !important;
+                }
+
+                /* Individual Options */
+                div[class$="-option"],
+                div[class*="-option "] {
+                    background-color: #1a1a1a !important;
+                    color: #ffffff !important;
+                    padding: 10px 12px !important;
+                    cursor: pointer !important;
+                    transition: background-color 0.15s ease !important;
+                }
+
+                /* Option Hover State */
+                div[class$="-option"]:hover,
+                div[class*="-option "]:hover,
+                div[class*="option--is-focused"] {
+                    background-color: #00d4ff !important;
+                    color: #000000 !important;
+                }
+
+                /* Selected Option */
+                div[class*="option--is-selected"] {
+                    background-color: #006080 !important;
+                    color: #ffffff !important;
+                }
+                
+                div[class*="option--is-selected"]:hover {
+                    background-color: #007a99 !important;
+                }
+
+                /* Single Selected Value Display */
+                div[class$="-singleValue"],
+                div[class*="-singleValue "] {
+                    color: #ffffff !important;
+                }
+
+                /* Multi-Select Values (Tags) */
+                div[class$="-multiValue"],
+                div[class*="-multiValue "] {
+                    background-color: #00d4ff !important;
+                    border-radius: 4px !important;
+                }
+
+                div[class$="-multiValueLabel"],
+                div[class*="-multiValueLabel "] {
+                    color: #000000 !important;
+                    padding: 3px 6px !important;
+                    font-weight: 500 !important;
+                }
+
+                div[class$="-multiValueRemove"],
+                div[class*="-multiValueRemove "] {
+                    color: #000000 !important;
+                }
+                
+                div[class$="-multiValueRemove"]:hover,
+                div[class*="-multiValueRemove "]:hover {
+                    background-color: #ff3366 !important;
+                    color: #ffffff !important;
+                }
+
+                /* Placeholder Text */
+                div[class$="-placeholder"],
+                div[class*="-placeholder "] {
+                    color: #888 !important;
+                }
+
+                /* Input Field */
+                div[class$="-Input"] input,
+                div[class*="-Input "] input {
+                    color: #ffffff !important;
+                    caret-color: #00d4ff !important;
+                }
+
+                /* Indicator Separator */
+                div[class$="-indicatorSeparator"],
+                div[class*="-indicatorSeparator "],
+                span[class$="-indicatorSeparator"] {
+                    background-color: #444 !important;
+                }
+
+                /* Dropdown/Clear Indicators */
+                div[class$="-indicatorContainer"],
+                div[class*="-indicatorContainer "] {
+                    color: #888 !important;
+                }
+                
+                div[class$="-indicatorContainer"]:hover,
+                div[class*="-indicatorContainer "]:hover {
+                    color: #00d4ff !important;
+                }
+
+                /* No Options Message */
+                div[class$="-NoOptionsMessage"],
+                div[class*="-NoOptionsMessage "],
+                .Select-noresults {
+                    color: #888 !important;
                     padding: 10px !important;
+                    text-align: center !important;
                 }
-                .Select-option:hover {
-                    background-color: #00d4ff !important;
-                    color: #000000 !important;
+
+                /* Loading Indicator */
+                div[class$="-loadingIndicator"],
+                div[class*="-loadingIndicator "] {
+                    color: #00d4ff !important;
                 }
-                .Select-value-label {
+                
+                /* === LEGACY SELECT SUPPORT === */
+                .Select--single > .Select-control .Select-value {
                     color: #ffffff !important;
                 }
-                .Select-placeholder {
-                    color: #999 !important;
+                
+                .Select.is-open > .Select-control {
+                    border-color: #00d4ff !important;
                 }
-                .Select-input > input {
-                    color: #ffffff !important;
-                }
-                /* Для нового react-select (v5+) */
-                div[class*="control"] {
-                    background-color: #2a2a2a !important;
-                    border-color: #444 !important;
-                }
-                div[class*="menu"] {
-                    background-color: #2a2a2a !important;
-                }
-                div[class*="option"] {
-                    background-color: #2a2a2a !important;
-                    color: #ffffff !important;
-                }
-                div[class*="option"]:hover {
-                    background-color: #00d4ff !important;
-                    color: #000000 !important;
-                }
-                div[class*="singleValue"],
-                div[class*="multiValue"],
-                div[class*="multiValueLabel"] {
-                    color: #ffffff !important;
-                }
-                div[class*="Input"] {
-                    color: #ffffff !important;
+                
+                .Select.is-focused:not(.is-open) > .Select-control {
+                    border-color: #00d4ff !important;
+                    box-shadow: 0 0 0 1px #00d4ff !important;
                 }
             </style>
         </head>
@@ -163,14 +349,22 @@ def create_simple_app():
                 ])
             ]),
 
-            # Status Bar
+            # Status Bar with Live Indicator
             dbc.Row([
-                dbc.Col(dbc.Alert(
-                    id="status-alert",
-                    children="✅ Dashboard загружается...",
-                    color="success",
-                    className="mb-3"
-                ), width=12)
+                dbc.Col([
+                    dbc.Alert(
+                        id="status-alert",
+                        children=[
+                            html.Span("🔴 ", id="live-indicator", style={
+                                "animation": "pulse 1s infinite",
+                                "display": "inline-block"
+                            }),
+                            html.Span("Dashboard загружается...", id="status-text")
+                        ],
+                        color="success",
+                        className="mb-3"
+                    )
+                ], width=12)
             ]),
 
             # Controls Row 1
@@ -280,12 +474,26 @@ def create_simple_app():
                 ], width=12)
             ]),
 
-            # Auto-refresh interval
-            dcc.Interval(id="interval-update", interval=30 * 1000, n_intervals=0),
+            # Auto-refresh interval - Real-time update every 3 seconds
+            dcc.Interval(id="interval-update", interval=3 * 1000, n_intervals=0),
+            
+            # Store for caching previous data (for incremental updates)
+            dcc.Store(id="cache-store", data={"last_symbol": None, "last_price": None}),
         ],
         fluid=True,
         style={"backgroundColor": "#0a0a0a", "minHeight": "100vh", "padding": "20px"}
     )
+
+    # Cache for optimized updates
+    _dashboard_cache = {
+        'last_symbol': None,
+        'last_exchange': None,
+        'last_timeframe': None,
+        'last_df': None,
+        'last_update': None,
+        'signals_cache': [],
+        'signal_update_counter': 0,
+    }
 
     @app.callback(
         [
@@ -305,18 +513,64 @@ def create_simple_app():
         prevent_initial_call=False
     )
     def update_dashboard(n_clicks, n_intervals, symbol, exchange, timeframe, indicators, oscillators):
-        """Обновление дашборда с реальными данными."""
+        """
+        Обновление дашборда с реальными данными в реальном времени.
+        
+        Оптимизации:
+        - Кэширование данных между обновлениями
+        - Быстрое обновление цены каждые 3 секунды
+        - Генерация сигналов каждые 5 обновлений (15 сек)
+        """
         try:
-            logger.info(f"Загрузка данных {symbol} {timeframe} от {exchange}")
-
-            # Получаем реальные данные
-            df = data_manager.get_ohlcv(symbol=symbol, timeframe=timeframe, limit=200, exchange_id=exchange)
+            # Проверяем, изменились ли параметры
+            params_changed = (
+                _dashboard_cache['last_symbol'] != symbol or
+                _dashboard_cache['last_exchange'] != exchange or
+                _dashboard_cache['last_timeframe'] != timeframe
+            )
+            
+            # Принудительное обновление при нажатии кнопки или изменении параметров
+            force_refresh = n_clicks is not None and params_changed
+            
+            if params_changed:
+                logger.info(f"Параметры изменены: {symbol} {timeframe} от {exchange}")
+                _dashboard_cache['signal_update_counter'] = 0
+            
+            # Получаем данные (force_refresh только при изменении параметров)
+            df = data_manager.get_ohlcv(
+                symbol=symbol, 
+                timeframe=timeframe, 
+                limit=200, 
+                exchange_id=exchange,
+                force_refresh=force_refresh
+            )
 
             if df is None or df.empty:
-                return create_empty_chart(), html.P("Нет данных"), f"⚠️ Нет данных для {symbol}"
+                status_content = [
+                    html.Span("⚠️ ", style={"color": "#ffcc00"}),
+                    html.Span(f"Нет данных для {symbol}")
+                ]
+                return create_empty_chart(), html.P("Нет данных"), status_content
 
-            # Генерируем сигналы
-            signals = signal_generator.generate_signals(symbol=symbol, timeframe=timeframe, limit=200)
+            # Обновляем кэш
+            _dashboard_cache['last_symbol'] = symbol
+            _dashboard_cache['last_exchange'] = exchange
+            _dashboard_cache['last_timeframe'] = timeframe
+            _dashboard_cache['last_df'] = df
+            _dashboard_cache['last_update'] = datetime.now()
+            
+            # Генерируем сигналы каждые 5 обновлений (15 сек) или при изменении параметров
+            _dashboard_cache['signal_update_counter'] += 1
+            if params_changed or _dashboard_cache['signal_update_counter'] >= 5:
+                signals = signal_generator.generate_signals(
+                    symbol=symbol, 
+                    timeframe=timeframe, 
+                    limit=200
+                )
+                _dashboard_cache['signals_cache'] = signals
+                _dashboard_cache['signal_update_counter'] = 0
+            else:
+                signals = _dashboard_cache['signals_cache']
 
             # Создаем график с индикаторами
             fig = create_live_chart(df, signals, symbol, timeframe, indicators or [], oscillators or [])
@@ -324,15 +578,44 @@ def create_simple_app():
             # Таблица сигналов
             signals_table = create_signals_table(signals)
 
+            # Формируем статус с live-индикатором
             price = df['close'].iloc[-1]
+            prev_price = df['close'].iloc[-2] if len(df) > 1 else price
+            price_change = ((price - prev_price) / prev_price) * 100
+            
+            # Определяем цвет и символ изменения цены
+            if price_change > 0:
+                change_color = "#00ff88"
+                change_symbol = "▲"
+            elif price_change < 0:
+                change_color = "#ff3366"
+                change_symbol = "▼"
+            else:
+                change_color = "#ffffff"
+                change_symbol = "■"
+            
             timestamp = datetime.now().strftime("%H:%M:%S")
-            status = f"✅ {timestamp} | {exchange.upper()}: {symbol} ${price:,.2f} | Сигналов: {len(signals)}"
+            
+            status_content = [
+                html.Span(className="live-dot"),
+                html.Span("LIVE ", style={"color": "#00ff00", "fontWeight": "bold", "marginRight": "10px"}),
+                html.Span(f"{timestamp} | ", style={"color": "#888"}),
+                html.Span(f"{exchange.upper()}: ", style={"color": "#00d4ff"}),
+                html.Span(f"{symbol} ", style={"fontWeight": "bold"}),
+                html.Span(f"${price:,.2f} ", style={"color": "#ffffff", "fontWeight": "bold"}),
+                html.Span(f"{change_symbol} {abs(price_change):.2f}%", style={"color": change_color, "marginLeft": "5px"}),
+                html.Span(f" | Сигналов: {len(signals)}", style={"color": "#888", "marginLeft": "10px"}),
+            ]
 
-            return fig, signals_table, status
+            return fig, signals_table, status_content
 
         except Exception as e:
             logger.error(f"Ошибка дашборда: {e}", exc_info=True)
-            return create_empty_chart(), html.P("Ошибка"), f"❌ Ошибка: {str(e)}"
+            status_content = [
+                html.Span("❌ ", style={"color": "#ff3366"}),
+                html.Span(f"Ошибка: {str(e)}")
+            ]
+            return create_empty_chart(), html.P("Ошибка загрузки данных"), status_content
 
     return app
 

@@ -1,9 +1,14 @@
 """
-Система генерации торговых сигналов на основе Smart Money Concepts.
+Система генерации торговых сигналов на основе Smart Money Concepts + ML Ensemble.
 Генерирует сигналы с entry, stop loss, take profit и отслеживает их.
+
+Система комбинирует:
+- Smart Money Concepts (Order Blocks, FVG, Market Structure) - 40%
+- LightGBM ML Model - 35%
+- LSTM Neural Network - 25%
 """
 import logging
-from typing import Optional
+from typing import Optional, List, Dict, Any
 from datetime import datetime
 import pandas as pd
 
@@ -17,19 +22,33 @@ from indicators.market_profile.market_profile import MarketProfileCalculator
 from indicators.footprint.delta import DeltaAnalyzer
 from utils.risk_manager import RiskManager
 
+# ML Ensemble integration
+try:
+    from ml.ensemble_model import EnsembleSignalGenerator
+    HAS_ENSEMBLE = True
+except ImportError:
+    HAS_ENSEMBLE = False
+    EnsembleSignalGenerator = None
+
 logger = logging.getLogger(__name__)
 
 
 class SignalGenerator:
     """
-    Генератор торговых сигналов на основе Smart Money Concepts.
+    Генератор торговых сигналов на основе Smart Money Concepts + ML Ensemble.
+    
+    Использует комбинированную систему:
+    - Smart Money Concepts (40% веса)
+    - LightGBM (35% веса)
+    - LSTM (25% веса)
     """
     
     def __init__(
         self,
         data_manager: Optional[MarketDataManager] = None,
         min_confidence: float = 0.6,
-        min_confluence: int = 3
+        min_confluence: int = 3,
+        use_ml_ensemble: bool = True
     ):
         """
         Инициализация генератора сигналов.
@@ -38,12 +57,14 @@ class SignalGenerator:
             data_manager: Менеджер данных рынка
             min_confidence: Минимальная уверенность сигнала (0-1)
             min_confluence: Минимальное количество подтверждающих сигналов
+            use_ml_ensemble: Использовать ML ensemble для генерации сигналов
         """
         self.data_manager = data_manager or MarketDataManager()
         self.min_confidence = min_confidence
         self.min_confluence = min_confluence
+        self.use_ml_ensemble = use_ml_ensemble
         
-        # Инициализация детекторов
+        # Инициализация Smart Money детекторов
         self.ob_detector = OrderBlockDetector()
         self.fvg_detector = FairValueGapDetector()
         self.market_structure = MarketStructureAnalyzer()
@@ -51,6 +72,16 @@ class SignalGenerator:
         self.mp_calculator = MarketProfileCalculator()
         self.delta_analyzer = DeltaAnalyzer()
         self.risk_manager = RiskManager(risk_per_trade=0.01)
+        
+        # ML Ensemble (initialized lazily)
+        self.ensemble: Optional[EnsembleSignalGenerator] = None
+        if use_ml_ensemble and HAS_ENSEMBLE:
+            try:
+                self.ensemble = EnsembleSignalGenerator()
+                logger.info("ML Ensemble initialized for signal generation")
+            except Exception as e:
+                logger.warning(f"Failed to initialize ML Ensemble: {e}")
+                self.ensemble = None
         
         # Кэш для активных сигналов
         self.active_signals: dict[str, SignalModel] = {}
@@ -62,7 +93,11 @@ class SignalGenerator:
         limit: int = 200
     ) -> list[SignalModel]:
         """
-        Генерирует торговые сигналы для указанной пары.
+        Генерирует торговые сигналы для указанной пары используя комбинированную систему.
+        
+        Метод комбинирует:
+        1. Smart Money Concepts (Order Blocks, FVG, Market Structure)
+        2. ML Ensemble (LightGBM + LSTM) если доступен
         
         Args:
             symbol: Торговая пара (например, BTC/USDT)
@@ -70,7 +105,7 @@ class SignalGenerator:
             limit: Количество свечей для анализа
             
         Returns:
-            Список сигналов
+            Список сигналов с комбинированной уверенностью
         """
         try:
             # Загружаем данные
@@ -85,20 +120,25 @@ class SignalGenerator:
                 logger.warning(f"Нет данных для {symbol}")
                 return []
             
-            # Вычисляем индикаторы
+            # Вычисляем Smart Money индикаторы
             df = self._calculate_indicators(df)
             
-            # Генерируем сигналы
-            signals = self._analyze_and_generate_signals(df, symbol, timeframe)
+            # Генерируем Smart Money сигналы
+            smc_signals = self._analyze_and_generate_signals(df, symbol, timeframe)
+            
+            # Если есть ML Ensemble, комбинируем с его предсказаниями
+            if self.ensemble and self.use_ml_ensemble:
+                smc_signals = self._enhance_with_ml_ensemble(smc_signals, df, symbol, timeframe)
             
             # Фильтруем по минимальной уверенности
             filtered_signals = [
-                s for s in signals
+                s for s in smc_signals
                 if s.confidence >= self.min_confidence
             ]
             
             logger.info(
-                f"Сгенерировано {len(filtered_signals)} сигналов для {symbol}"
+                f"Сгенерировано {len(filtered_signals)} сигналов для {symbol} "
+                f"(ML: {'enabled' if self.ensemble else 'disabled'})"
             )
             
             return filtered_signals
@@ -106,6 +146,142 @@ class SignalGenerator:
         except Exception as e:
             logger.error(f"Ошибка генерации сигналов для {symbol}: {e}", exc_info=True)
             return []
+    
+    def _enhance_with_ml_ensemble(
+        self,
+        smc_signals: List[SignalModel],
+        df: pd.DataFrame,
+        symbol: str,
+        timeframe: str
+    ) -> List[SignalModel]:
+        """
+        Улучшает Smart Money сигналы с помощью ML Ensemble.
+        
+        Args:
+            smc_signals: Список SMC сигналов
+            df: DataFrame с данными и индикаторами
+            symbol: Торговая пара
+            timeframe: Таймфрейм
+            
+        Returns:
+            Улучшенные сигналы с комбинированной уверенностью
+        """
+        if not self.ensemble:
+            return smc_signals
+        
+        enhanced_signals = []
+        
+        for signal in smc_signals:
+            try:
+                # Преобразуем SMC сигнал в формат для ensemble
+                smc_dict = {
+                    'action': signal.signal_type,
+                    'confidence': signal.confidence
+                }
+                
+                # Получаем ensemble предсказание
+                ensemble_pred = self.ensemble.predict(df, smc_signal=smc_dict)
+                
+                # Обновляем уверенность сигнала на основе ensemble
+                combined_confidence = ensemble_pred['confidence']
+                
+                # Проверяем согласованность направления
+                if ensemble_pred['action'] == signal.signal_type:
+                    # Направления совпадают - увеличиваем уверенность
+                    combined_confidence = min(combined_confidence * 1.1, 0.95)
+                elif ensemble_pred['action'] == 'HOLD':
+                    # ML считает HOLD - немного снижаем уверенность
+                    combined_confidence *= 0.9
+                else:
+                    # Противоположные направления - значительно снижаем
+                    combined_confidence *= 0.7
+                
+                # Создаем улучшенный сигнал
+                enhanced_signal = SignalModel(
+                    symbol=signal.symbol,
+                    type=signal.signal_type,
+                    entry_price=signal.entry_price,
+                    stop_loss=signal.stop_loss,
+                    take_profit=signal.take_profit,
+                    confluence=signal.confluence,
+                    timeframe=timeframe,
+                    indicators=signal.indicators + ['ML_Ensemble'],
+                    confidence=combined_confidence,
+                    timestamp=signal.timestamp
+                )
+                
+                # Добавляем метаданные об ensemble
+                enhanced_signal.ml_components = ensemble_pred.get('components', {})
+                enhanced_signal.signal_source = 'SMC+ML'
+                
+                enhanced_signals.append(enhanced_signal)
+                
+            except Exception as e:
+                logger.warning(f"Failed to enhance signal with ML: {e}")
+                enhanced_signals.append(signal)
+        
+        # Если нет SMC сигналов, но ML дает сильный сигнал, создаем его
+        if not smc_signals and self.ensemble:
+            try:
+                ensemble_pred = self.ensemble.predict(df)
+                if ensemble_pred['confidence'] > 0.6 and ensemble_pred['action'] != 'HOLD':
+                    ml_signal = self._create_ml_only_signal(
+                        df, symbol, timeframe, ensemble_pred
+                    )
+                    if ml_signal:
+                        enhanced_signals.append(ml_signal)
+            except Exception as e:
+                logger.warning(f"Failed to create ML-only signal: {e}")
+        
+        return enhanced_signals
+    
+    def _create_ml_only_signal(
+        self,
+        df: pd.DataFrame,
+        symbol: str,
+        timeframe: str,
+        ensemble_pred: Dict[str, Any]
+    ) -> Optional[SignalModel]:
+        """Создает сигнал только на основе ML предсказания."""
+        try:
+            current_candle = df.iloc[-1]
+            current_price = current_candle['close']
+            
+            # ATR для расчета SL/TP
+            atr = current_candle.get('atr', current_price * 0.02)
+            if pd.isna(atr) or atr == 0:
+                atr = current_price * 0.02
+            
+            signal_type = ensemble_pred['action']
+            
+            if signal_type == 'BUY':
+                stop_loss = current_price - (atr * 1.5)
+                take_profit = current_price + (atr * 2.5)
+            elif signal_type == 'SELL':
+                stop_loss = current_price + (atr * 1.5)
+                take_profit = current_price - (atr * 2.5)
+            else:
+                return None
+            
+            signal = SignalModel(
+                symbol=symbol,
+                type=signal_type,
+                entry_price=current_price,
+                stop_loss=stop_loss,
+                take_profit=take_profit,
+                confluence=1,  # ML only
+                timeframe=timeframe,
+                indicators=['ML_Ensemble'],
+                confidence=ensemble_pred['confidence'] * 0.9,  # Slight discount for ML-only
+                timestamp=datetime.now()
+            )
+            signal.signal_source = 'ML_Only'
+            
+            return signal
+            
+        except Exception as e:
+            logger.error(f"Error creating ML-only signal: {e}")
+            return None
     
     def _calculate_indicators(self, df: pd.DataFrame) -> pd.DataFrame:
         """Вычисляет все необходимые индикаторы."""

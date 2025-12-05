@@ -1,6 +1,11 @@
 """
 Ensemble Signal Generator.
-Combines LSTM (Deep Learning) and Random Forest (Traditional ML) for robust predictions.
+Combines Smart Money Concepts, LightGBM, and LSTM for robust predictions.
+
+Voting weights:
+- Smart Money Concepts: 40%
+- LightGBM: 35%
+- LSTM: 25%
 """
 
 import logging
@@ -24,24 +29,59 @@ try:
 except ImportError:
     HAS_SKLEARN = False
 
+try:
+    from ml.lightgbm_model import LightGBMSignalGenerator
+    HAS_LIGHTGBM = True
+except ImportError:
+    HAS_LIGHTGBM = False
+    LightGBMSignalGenerator = None
+
 
 class EnsembleSignalGenerator:
     """
-    Combines predictions from multiple models (LSTM + Random Forest).
+    Combines predictions from multiple models with weighted voting:
+    - Smart Money Concepts: 40%
+    - LightGBM: 35%
+    - LSTM: 25%
     """
+    
+    # Voting weights
+    WEIGHT_SMC = 0.40
+    WEIGHT_LIGHTGBM = 0.35
+    WEIGHT_LSTM = 0.25
 
     def __init__(
         self,
         lstm_model_path: Optional[str] = None,
         rf_model_path: Optional[str] = None,
+        lightgbm_model_path: Optional[str] = None,
     ):
         """
-        Initialize Ensemble Generator.
+        Initialize Ensemble Generator with all model components.
+        
+        Args:
+            lstm_model_path: Path to pre-trained LSTM model
+            rf_model_path: Path to pre-trained Random Forest model (legacy)
+            lightgbm_model_path: Path to pre-trained LightGBM model
         """
         if not HAS_SKLEARN:
             raise ImportError("scikit-learn is required for EnsembleSignalGenerator")
 
+        # LSTM component
         self.lstm = LSTMSignalGenerator(model_path=lstm_model_path)
+        
+        # LightGBM component
+        self.lightgbm = None
+        if HAS_LIGHTGBM:
+            try:
+                self.lightgbm = LightGBMSignalGenerator(model_path=lightgbm_model_path)
+                logger.info("LightGBM component initialized")
+            except Exception as e:
+                logger.warning(f"Failed to initialize LightGBM: {e}")
+        else:
+            logger.warning("LightGBM not available - using reduced ensemble")
+        
+        # Legacy RF model (kept for backward compatibility)
         self.rf_model = None
         self.is_trained = False
 
@@ -54,23 +94,52 @@ class EnsembleSignalGenerator:
         epochs: int = 50,
     ) -> Dict[str, Any]:
         """
-        Train both models.
+        Train all ensemble components.
         """
         logger.info("Starting Ensemble Training...")
+        metrics = {}
+        accuracies = []
 
-        # 1. Train LSTM
-        lstm_metrics = self.lstm.train(ohlcv_df, epochs=epochs)
+        # 1. Train LSTM (weight: 25%)
+        try:
+            lstm_metrics = self.lstm.train(ohlcv_df, epochs=epochs)
+            metrics["lstm_metrics"] = lstm_metrics
+            accuracies.append(lstm_metrics["final_accuracy"])
+            logger.info(f"LSTM trained - accuracy: {lstm_metrics['final_accuracy']:.4f}")
+        except Exception as e:
+            logger.error(f"LSTM training failed: {e}")
+            metrics["lstm_metrics"] = {"error": str(e)}
 
-        # 2. Train Random Forest
-        rf_metrics = self._train_rf(ohlcv_df)
+        # 2. Train LightGBM (weight: 35%)
+        if self.lightgbm:
+            try:
+                lgb_metrics = self.lightgbm.train(ohlcv_df)
+                metrics["lightgbm_metrics"] = lgb_metrics
+                accuracies.append(lgb_metrics["accuracy"])
+                logger.info(f"LightGBM trained - accuracy: {lgb_metrics['accuracy']:.4f}")
+            except Exception as e:
+                logger.error(f"LightGBM training failed: {e}")
+                metrics["lightgbm_metrics"] = {"error": str(e)}
+
+        # 3. Train Random Forest (legacy, only if LightGBM not available)
+        if not self.lightgbm:
+            try:
+                rf_metrics = self._train_rf(ohlcv_df)
+                metrics["rf_metrics"] = rf_metrics
+                accuracies.append(rf_metrics["accuracy"])
+            except Exception as e:
+                logger.error(f"RF training failed: {e}")
+                metrics["rf_metrics"] = {"error": str(e)}
 
         self.is_trained = True
+        
+        # Calculate weighted average accuracy
+        combined_accuracy = np.mean(accuracies) if accuracies else 0.0
+        metrics["combined_accuracy"] = float(combined_accuracy)
+        
+        logger.info(f"Ensemble training complete - combined accuracy: {combined_accuracy:.4f}")
 
-        return {
-            "lstm_metrics": lstm_metrics,
-            "rf_metrics": rf_metrics,
-            "combined_accuracy": (lstm_metrics["final_accuracy"] + rf_metrics["accuracy"]) / 2,
-        }
+        return metrics
 
     def _train_rf(self, ohlcv_df: pd.DataFrame) -> Dict[str, float]:
         """Train Random Forest model."""
@@ -123,53 +192,130 @@ class EnsembleSignalGenerator:
         logger.info(f"Random Forest Accuracy: {acc:.4f}")
         return {"accuracy": float(acc)}
 
-    def predict(self, ohlcv_df: pd.DataFrame) -> Dict[str, Any]:
+    def predict(self, ohlcv_df: pd.DataFrame, smc_signal: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """
-        Generate ensemble prediction.
+        Generate ensemble prediction with weighted voting.
+        
+        Args:
+            ohlcv_df: OHLCV DataFrame for prediction
+            smc_signal: Optional Smart Money Concepts signal dict
+                        Expected format: {'action': 'BUY/SELL/HOLD', 'confidence': 0.0-1.0}
+        
+        Returns:
+            Combined prediction with all component contributions
         """
-        if not self.is_trained and not self.rf_model:
+        if not self.is_trained and not self.rf_model and not self.lightgbm:
             logger.warning("Ensemble not fully trained")
 
-        # 1. Get LSTM Prediction
-        lstm_pred = self.lstm.predict(ohlcv_df)
+        components = {}
+        weighted_probs = {"buy": 0.0, "sell": 0.0, "hold": 0.0}
+        total_weight = 0.0
 
-        # 2. Get RF Prediction
-        rf_pred = self._predict_rf(ohlcv_df)
+        # 1. Smart Money Concepts (weight: 40%)
+        if smc_signal:
+            smc_probs = self._convert_signal_to_probs(smc_signal)
+            for key in weighted_probs:
+                weighted_probs[key] += smc_probs[key] * self.WEIGHT_SMC
+            total_weight += self.WEIGHT_SMC
+            components["smc"] = {
+                "action": smc_signal.get("action", "HOLD"),
+                "confidence": smc_signal.get("confidence", 0.5),
+                "probabilities": smc_probs,
+                "weight": self.WEIGHT_SMC,
+            }
 
-        # 3. Combine (Voting or Weighted Average)
-        # LSTM returns probs for [Buy, Sell, Hold]
-        # RF returns class or probs. Let's get probs.
+        # 2. LightGBM Prediction (weight: 35%)
+        if self.lightgbm and self.lightgbm.is_trained:
+            try:
+                lgb_pred = self.lightgbm.predict(ohlcv_df)
+                lgb_probs = lgb_pred["probabilities"]
+                for key in weighted_probs:
+                    weighted_probs[key] += lgb_probs[key] * self.WEIGHT_LIGHTGBM
+                total_weight += self.WEIGHT_LIGHTGBM
+                components["lightgbm"] = {
+                    **lgb_pred,
+                    "weight": self.WEIGHT_LIGHTGBM,
+                }
+            except Exception as e:
+                logger.error(f"LightGBM prediction failed: {e}")
 
-        lstm_probs = lstm_pred["probabilities"]
-        rf_probs = rf_pred["probabilities"]
+        # 3. LSTM Prediction (weight: 25%)
+        if self.lstm.is_trained:
+            try:
+                lstm_pred = self.lstm.predict(ohlcv_df)
+                lstm_probs = lstm_pred["probabilities"]
+                for key in weighted_probs:
+                    weighted_probs[key] += lstm_probs[key] * self.WEIGHT_LSTM
+                total_weight += self.WEIGHT_LSTM
+                components["lstm"] = {
+                    **lstm_pred,
+                    "weight": self.WEIGHT_LSTM,
+                }
+            except Exception as e:
+                logger.error(f"LSTM prediction failed: {e}")
 
-        # Weighted average (give slightly more weight to LSTM usually, or equal)
-        combined_buy = (lstm_probs["buy"] + rf_probs["buy"]) / 2
-        combined_sell = (lstm_probs["sell"] + rf_probs["sell"]) / 2
-        combined_hold = (lstm_probs["hold"] + rf_probs["hold"]) / 2
+        # 4. Fallback to RF if no other ML models available
+        if not self.lightgbm and self.rf_model:
+            try:
+                rf_pred = self._predict_rf(ohlcv_df)
+                rf_probs = rf_pred["probabilities"]
+                rf_weight = self.WEIGHT_LIGHTGBM  # Use LightGBM's weight
+                for key in weighted_probs:
+                    weighted_probs[key] += rf_probs[key] * rf_weight
+                total_weight += rf_weight
+                components["rf"] = rf_pred
+            except Exception as e:
+                logger.error(f"RF prediction failed: {e}")
+
+        # Normalize probabilities if we have any predictions
+        if total_weight > 0:
+            for key in weighted_probs:
+                weighted_probs[key] /= total_weight
+        else:
+            # Default to neutral
+            weighted_probs = {"buy": 0.33, "sell": 0.33, "hold": 0.34}
 
         # Determine final action
-        if combined_buy > 0.5:
+        if weighted_probs["buy"] > 0.45:  # Lower threshold for combined signal
             action = "BUY"
-            confidence = combined_buy
-        elif combined_sell > 0.5:
+            confidence = weighted_probs["buy"]
+        elif weighted_probs["sell"] > 0.45:
             action = "SELL"
-            confidence = combined_sell
+            confidence = weighted_probs["sell"]
         else:
             action = "HOLD"
-            confidence = combined_hold
+            confidence = weighted_probs["hold"]
 
+        from datetime import datetime
+        
         return {
             "action": action,
             "confidence": float(confidence),
             "ensemble_probabilities": {
-                "buy": float(combined_buy),
-                "sell": float(combined_sell),
-                "hold": float(combined_hold),
+                "buy": float(weighted_probs["buy"]),
+                "sell": float(weighted_probs["sell"]),
+                "hold": float(weighted_probs["hold"]),
             },
-            "components": {"lstm": lstm_pred, "rf": rf_pred},
-            "timestamp": lstm_pred["timestamp"],
+            "components": components,
+            "total_weight_used": float(total_weight),
+            "timestamp": datetime.now().isoformat(),
         }
+    
+    def _convert_signal_to_probs(self, signal: Dict[str, Any]) -> Dict[str, float]:
+        """Convert a signal action/confidence to probability distribution."""
+        action = signal.get("action", "HOLD").upper()
+        confidence = signal.get("confidence", 0.5)
+        
+        # Distribute remaining probability
+        remaining = 1.0 - confidence
+        other_prob = remaining / 2
+        
+        if action == "BUY":
+            return {"buy": confidence, "sell": other_prob, "hold": other_prob}
+        elif action == "SELL":
+            return {"buy": other_prob, "sell": confidence, "hold": other_prob}
+        else:  # HOLD
+            return {"buy": other_prob, "sell": other_prob, "hold": confidence}
 
     def _predict_rf(self, ohlcv_df: pd.DataFrame) -> Dict[str, Any]:
         """Generate Random Forest prediction."""
@@ -197,11 +343,28 @@ class EnsembleSignalGenerator:
         return {"probabilities": result_probs}
 
     def save_models(self, path_prefix: str):
-        """Save both models."""
-        self.lstm.save_model(f"{path_prefix}_lstm.h5")
+        """Save all ensemble models."""
+        # Save LSTM
+        try:
+            self.lstm.save_model(f"{path_prefix}_lstm.h5")
+        except Exception as e:
+            logger.error(f"Failed to save LSTM: {e}")
+        
+        # Save LightGBM
+        if self.lightgbm and self.lightgbm.is_trained:
+            try:
+                self.lightgbm.save_model(f"{path_prefix}_lightgbm.txt")
+            except Exception as e:
+                logger.error(f"Failed to save LightGBM: {e}")
+        
+        # Save RF (legacy)
         if self.rf_model:
-            with open(f"{path_prefix}_rf.pkl", "wb") as f:
-                pickle.dump(self.rf_model, f)
+            try:
+                with open(f"{path_prefix}_rf.pkl", "wb") as f:
+                    pickle.dump(self.rf_model, f)
+            except Exception as e:
+                logger.error(f"Failed to save RF: {e}")
+                
         logger.info(f"Ensemble models saved to {path_prefix}_*")
 
     def load_rf_model(self, path: str):
@@ -209,3 +372,10 @@ class EnsembleSignalGenerator:
         with open(path, "rb") as f:
             self.rf_model = pickle.load(f)
         self.is_trained = True
+    
+    def load_lightgbm_model(self, path: str):
+        """Load LightGBM model."""
+        if self.lightgbm:
+            self.lightgbm.load_model(path)
+        else:
+            logger.warning("LightGBM not initialized, cannot load model")
