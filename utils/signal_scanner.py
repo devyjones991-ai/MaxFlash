@@ -46,9 +46,9 @@ class SignalScanner:
         'timeframe': '15m',           # Таймфрейм для сканирования
         'exchange': 'binance',         # Биржа
         'min_volume_usd': 1_000_000,   # Минимальный объём за 24ч
-        'min_confidence': 0.5,         # Минимальная уверенность
-        'rsi_oversold': 30,            # RSI перепроданность
-        'rsi_overbought': 70,          # RSI перекупленность
+        'min_confidence': 0.22,        # Минимальная уверенность (2 из 9 подтверждений)
+        'rsi_oversold': 35,            # RSI перепроданность (ослаблено с 30)
+        'rsi_overbought': 65,          # RSI перекупленность (ослаблено с 70)
         'ema_fast': 9,                 # Быстрая EMA
         'ema_slow': 21,                # Медленная EMA
         'atr_multiplier_sl': 1.5,      # ATR множитель для SL
@@ -143,10 +143,21 @@ class SignalScanner:
         long_signal = self._check_long(df, current, prev)
         short_signal = self._check_short(df, current, prev)
         
-        if long_signal and long_signal['confidence'] >= settings['min_confidence']:
-            return self._create_signal(symbol, "LONG", df, long_signal)
-        elif short_signal and short_signal['confidence'] >= settings['min_confidence']:
-            return self._create_signal(symbol, "SHORT", df, short_signal)
+        # Логируем для отладки
+        rsi = current.get('rsi', 0)
+        ema_fast = current.get('ema_fast', 0)
+        ema_slow = current.get('ema_slow', 0)
+        logger.debug(f"{symbol}: RSI={rsi:.1f}, EMA_F={ema_fast:.2f}, EMA_S={ema_slow:.2f}")
+        
+        if long_signal:
+            logger.info(f"{symbol} LONG: conf={long_signal['confidence']:.2f}, indicators={long_signal['indicators']}")
+            if long_signal['confidence'] >= settings['min_confidence']:
+                return self._create_signal(symbol, "LONG", df, long_signal)
+        
+        if short_signal:
+            logger.info(f"{symbol} SHORT: conf={short_signal['confidence']:.2f}, indicators={short_signal['indicators']}")
+            if short_signal['confidence'] >= settings['min_confidence']:
+                return self._create_signal(symbol, "SHORT", df, short_signal)
         
         return None
     
@@ -198,123 +209,199 @@ class SignalScanner:
         return df
     
     def _check_long(self, df: pd.DataFrame, current: pd.Series, prev: pd.Series) -> Optional[Dict]:
-        """Проверяет условия для LONG сигнала."""
-        settings = self.SCANNER_SETTINGS
+        """
+        Проверяет условия для LONG сигнала.
+        Комбинированный подход: текущее состояние + подтверждение тренда.
+        Требуется минимум 3 подтверждения.
+        """
         indicators = []
-        score = 0
-        max_score = 7
+        confirmations = 0
         
-        # 1. RSI перепроданность (выход из зоны < 30)
-        if prev['rsi'] < settings['rsi_oversold'] and current['rsi'] >= settings['rsi_oversold']:
-            indicators.append("RSI Oversold Exit")
-            score += 1.5
-        elif current['rsi'] < 40:  # Просто низкий RSI
-            indicators.append("Low RSI")
-            score += 0.5
+        # === СОСТОЯНИЕ ИНДИКАТОРОВ (текущие значения) ===
         
-        # 2. EMA crossover (быстрая пересекает медленную снизу вверх)
-        if prev['ema_fast'] < prev['ema_slow'] and current['ema_fast'] >= current['ema_slow']:
-            indicators.append("EMA Crossover")
-            score += 1.5
-        elif current['ema_fast'] > current['ema_slow']:  # Просто выше
-            indicators.append("EMA Bullish")
-            score += 0.5
+        # 1. RSI в зоне покупки (< 55, идеально < 40)
+        rsi = current['rsi']
+        if pd.notna(rsi):
+            if rsi < 30:
+                indicators.append("RSI Oversold (<30)")
+                confirmations += 2
+            elif rsi < 40:
+                indicators.append("RSI Low (<40)")
+                confirmations += 1.5
+            elif rsi < 50:
+                indicators.append("RSI Neutral-Low (<50)")
+                confirmations += 1
+            elif rsi < 55:
+                indicators.append("RSI Near-Neutral")
+                confirmations += 0.5
         
-        # 3. Цена выше EMA 200 (восходящий тренд)
-        if current['close'] > current['ema_200']:
-            indicators.append("Above EMA200")
-            score += 1
+        # 2. EMA выравнивание (fast > slow = бычий тренд)
+        if pd.notna(current['ema_fast']) and pd.notna(current['ema_slow']):
+            if current['ema_fast'] > current['ema_slow']:
+                indicators.append("EMA Bullish Alignment")
+                confirmations += 1
+                # Бонус за недавний crossover
+                if prev['ema_fast'] <= prev['ema_slow']:
+                    indicators.append("EMA Fresh Crossover")
+                    confirmations += 1
         
-        # 4. MACD бычий
-        if current['macd'] > current['macd_signal']:
-            indicators.append("MACD Bullish")
-            score += 1
-        if prev['macd_hist'] < 0 and current['macd_hist'] >= 0:
-            indicators.append("MACD Cross")
-            score += 0.5
+        # 3. Позиция относительно EMA 200 (тренд)
+        if pd.notna(current['ema_200']):
+            if current['close'] > current['ema_200']:
+                indicators.append("Uptrend (>EMA200)")
+                confirmations += 1
+            elif current['close'] > current['ema_200'] * 0.98:  # В пределах 2%
+                indicators.append("Near EMA200 Support")
+                confirmations += 0.5
         
-        # 5. Stochastic перепроданность
-        if current['stoch_k'] < 20 or (prev['stoch_k'] < 20 and current['stoch_k'] > prev['stoch_k']):
-            indicators.append("Stoch Oversold")
-            score += 1
+        # 4. MACD состояние
+        if pd.notna(current['macd']) and pd.notna(current['macd_signal']):
+            if current['macd'] > current['macd_signal']:
+                indicators.append("MACD Bullish")
+                confirmations += 1
+            if pd.notna(current['macd_hist']) and current['macd_hist'] > 0:
+                if prev['macd_hist'] <= 0:
+                    indicators.append("MACD Histogram Flip")
+                    confirmations += 1
         
-        # 6. Касание нижней Bollinger Band
-        if current['low'] <= current['bb_lower']:
-            indicators.append("BB Lower Touch")
-            score += 1
+        # 5. Stochastic состояние
+        if pd.notna(current['stoch_k']) and pd.notna(current['stoch_d']):
+            if current['stoch_k'] < 30:
+                indicators.append("Stoch Oversold")
+                confirmations += 1
+            elif current['stoch_k'] > current['stoch_d'] and current['stoch_k'] < 50:
+                indicators.append("Stoch Bullish Cross")
+                confirmations += 0.5
         
-        # 7. Повышенный объём
-        if current['volume'] > current['volume_sma'] * 1.5:
-            indicators.append("High Volume")
-            score += 0.5
+        # 6. Bollinger Bands - цена у нижней границы
+        if pd.notna(current['bb_lower']):
+            if current['close'] <= current['bb_lower'] * 1.01:
+                indicators.append("BB Lower Zone")
+                confirmations += 1
+            elif current['close'] < current['bb_middle']:
+                indicators.append("Below BB Middle")
+                confirmations += 0.5
         
-        if score >= 2:  # Минимум 2 балла для сигнала
-            confidence = min(score / max_score, 0.95)
+        # 7. Объём выше среднего (подтверждение)
+        if pd.notna(current['volume_sma']) and current['volume_sma'] > 0:
+            if current['volume'] > current['volume_sma'] * 1.3:
+                indicators.append("Volume Spike")
+                confirmations += 0.5
+        
+        # === ГЕНЕРАЦИЯ СИГНАЛА ===
+        # Минимум 2 подтверждения для сигнала (ослаблено для большего количества сигналов)
+        if confirmations >= 2 and len(indicators) >= 2:
+            # Расчёт confidence
+            max_confirmations = 9
+            confidence = min(confirmations / max_confirmations, 0.95)
+            
+            # Бонус за тренд
+            if "Uptrend (>EMA200)" in indicators:
+                confidence = min(confidence * 1.1, 0.95)
+            
             return {
                 'indicators': indicators,
                 'confidence': confidence,
-                'score': score
+                'confirmations': confirmations
             }
         
         return None
     
     def _check_short(self, df: pd.DataFrame, current: pd.Series, prev: pd.Series) -> Optional[Dict]:
-        """Проверяет условия для SHORT сигнала."""
-        settings = self.SCANNER_SETTINGS
+        """
+        Проверяет условия для SHORT сигнала.
+        Комбинированный подход: текущее состояние + подтверждение тренда.
+        Требуется минимум 3 подтверждения.
+        """
         indicators = []
-        score = 0
-        max_score = 7
+        confirmations = 0
         
-        # 1. RSI перекупленность (выход из зоны > 70)
-        if prev['rsi'] > settings['rsi_overbought'] and current['rsi'] <= settings['rsi_overbought']:
-            indicators.append("RSI Overbought Exit")
-            score += 1.5
-        elif current['rsi'] > 60:  # Просто высокий RSI
-            indicators.append("High RSI")
-            score += 0.5
+        # === СОСТОЯНИЕ ИНДИКАТОРОВ (текущие значения) ===
         
-        # 2. EMA crossover (быстрая пересекает медленную сверху вниз)
-        if prev['ema_fast'] > prev['ema_slow'] and current['ema_fast'] <= current['ema_slow']:
-            indicators.append("EMA Crossover")
-            score += 1.5
-        elif current['ema_fast'] < current['ema_slow']:
-            indicators.append("EMA Bearish")
-            score += 0.5
+        # 1. RSI в зоне продажи (> 45, идеально > 60)
+        rsi = current['rsi']
+        if pd.notna(rsi):
+            if rsi > 70:
+                indicators.append("RSI Overbought (>70)")
+                confirmations += 2
+            elif rsi > 60:
+                indicators.append("RSI High (>60)")
+                confirmations += 1.5
+            elif rsi > 50:
+                indicators.append("RSI Neutral-High (>50)")
+                confirmations += 1
+            elif rsi > 45:
+                indicators.append("RSI Near-Neutral")
+                confirmations += 0.5
         
-        # 3. Цена ниже EMA 200 (нисходящий тренд)
-        if current['close'] < current['ema_200']:
-            indicators.append("Below EMA200")
-            score += 1
+        # 2. EMA выравнивание (fast < slow = медвежий тренд)
+        if pd.notna(current['ema_fast']) and pd.notna(current['ema_slow']):
+            if current['ema_fast'] < current['ema_slow']:
+                indicators.append("EMA Bearish Alignment")
+                confirmations += 1
+                # Бонус за недавний crossover
+                if prev['ema_fast'] >= prev['ema_slow']:
+                    indicators.append("EMA Fresh Crossover")
+                    confirmations += 1
         
-        # 4. MACD медвежий
-        if current['macd'] < current['macd_signal']:
-            indicators.append("MACD Bearish")
-            score += 1
-        if prev['macd_hist'] > 0 and current['macd_hist'] <= 0:
-            indicators.append("MACD Cross")
-            score += 0.5
+        # 3. Позиция относительно EMA 200 (тренд)
+        if pd.notna(current['ema_200']):
+            if current['close'] < current['ema_200']:
+                indicators.append("Downtrend (<EMA200)")
+                confirmations += 1
+            elif current['close'] < current['ema_200'] * 1.02:  # В пределах 2%
+                indicators.append("Near EMA200 Resistance")
+                confirmations += 0.5
         
-        # 5. Stochastic перекупленность
-        if current['stoch_k'] > 80 or (prev['stoch_k'] > 80 and current['stoch_k'] < prev['stoch_k']):
-            indicators.append("Stoch Overbought")
-            score += 1
+        # 4. MACD состояние
+        if pd.notna(current['macd']) and pd.notna(current['macd_signal']):
+            if current['macd'] < current['macd_signal']:
+                indicators.append("MACD Bearish")
+                confirmations += 1
+            if pd.notna(current['macd_hist']) and current['macd_hist'] < 0:
+                if prev['macd_hist'] >= 0:
+                    indicators.append("MACD Histogram Flip")
+                    confirmations += 1
         
-        # 6. Касание верхней Bollinger Band
-        if current['high'] >= current['bb_upper']:
-            indicators.append("BB Upper Touch")
-            score += 1
+        # 5. Stochastic состояние
+        if pd.notna(current['stoch_k']) and pd.notna(current['stoch_d']):
+            if current['stoch_k'] > 70:
+                indicators.append("Stoch Overbought")
+                confirmations += 1
+            elif current['stoch_k'] < current['stoch_d'] and current['stoch_k'] > 50:
+                indicators.append("Stoch Bearish Cross")
+                confirmations += 0.5
         
-        # 7. Повышенный объём
-        if current['volume'] > current['volume_sma'] * 1.5:
-            indicators.append("High Volume")
-            score += 0.5
+        # 6. Bollinger Bands - цена у верхней границы
+        if pd.notna(current['bb_upper']):
+            if current['close'] >= current['bb_upper'] * 0.99:
+                indicators.append("BB Upper Zone")
+                confirmations += 1
+            elif current['close'] > current['bb_middle']:
+                indicators.append("Above BB Middle")
+                confirmations += 0.5
         
-        if score >= 2:
-            confidence = min(score / max_score, 0.95)
+        # 7. Объём выше среднего (подтверждение)
+        if pd.notna(current['volume_sma']) and current['volume_sma'] > 0:
+            if current['volume'] > current['volume_sma'] * 1.3:
+                indicators.append("Volume Spike")
+                confirmations += 0.5
+        
+        # === ГЕНЕРАЦИЯ СИГНАЛА ===
+        # Минимум 2 подтверждения для сигнала (ослаблено для большего количества сигналов)
+        if confirmations >= 2 and len(indicators) >= 2:
+            # Расчёт confidence
+            max_confirmations = 9
+            confidence = min(confirmations / max_confirmations, 0.95)
+            
+            # Бонус за тренд
+            if "Downtrend (<EMA200)" in indicators:
+                confidence = min(confidence * 1.1, 0.95)
+            
             return {
                 'indicators': indicators,
                 'confidence': confidence,
-                'score': score
+                'confirmations': confirmations
             }
         
         return None

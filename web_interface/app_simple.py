@@ -585,31 +585,50 @@ def create_simple_app():
             force_refresh = params_changed or trigger_id == 'refresh-button'
             
             # Получаем данные
-            df = data_manager.get_ohlcv(
-                symbol=symbol, 
-                timeframe=timeframe, 
-                limit=200, 
-                exchange_id=exchange,
-                force_refresh=force_refresh
-            )
+            try:
+                df = data_manager.get_ohlcv(
+                    symbol=symbol, 
+                    timeframe=timeframe, 
+                    limit=200, 
+                    exchange_id=exchange,
+                    force_refresh=force_refresh
+                )
+                logger.debug(f"Получены данные для {symbol}: {len(df) if df is not None else 0} свечей")
+            except Exception as data_err:
+                logger.error(f"Ошибка загрузки данных {symbol}: {data_err}")
+                df = None
 
             if df is None or df.empty:
+                # Если нет данных - показываем сообщение, но не ломаем интерфейс
                 status_content = [
                     html.Span("⚠️ ", style={"color": "#ffcc00"}),
-                    html.Span(f"Нет данных для {symbol}")
+                    html.Span(f"Нет данных для {symbol} - проверьте подключение")
                 ]
                 return create_empty_chart(), html.P("Нет данных"), status_content
 
+            # Убеждаемся что индекс DataFrame - datetime
+            if not isinstance(df.index, pd.DatetimeIndex):
+                if 'timestamp' in df.columns:
+                    df['timestamp'] = pd.to_datetime(df['timestamp'])
+                    df.set_index('timestamp', inplace=True)
+                else:
+                    df.index = pd.to_datetime(df.index)
+            
             # Обновляем кэш данных
-            _dashboard_cache['last_df'] = df
+            _dashboard_cache['last_df'] = df.copy()
             _dashboard_cache['last_update'] = datetime.now()
             
-            # Генерируем сигналы только по запросу (через отдельную кнопку)
-            # чтобы не блокировать основной callback
+            # Получаем сигналы из кэша
             signals = _dashboard_cache.get('signals_cache', [])
 
-            # Создаем график с индикаторами
-            fig = create_live_chart(df, signals, symbol, timeframe, indicators or [], oscillators or [])
+            # Создаем график с индикаторами (с защитой от ошибок)
+            try:
+                logger.info(f"Создаю график для {symbol}: {len(df)} свечей, price={df['close'].iloc[-1]:.2f}")
+                fig = create_live_chart(df, signals, symbol, timeframe, indicators or [], oscillators or [])
+                logger.debug(f"График создан успешно для {symbol}")
+            except Exception as chart_err:
+                logger.error(f"Ошибка создания графика для {symbol}: {chart_err}", exc_info=True)
+                fig = create_empty_chart()
 
             # Таблица сигналов
             signals_table = create_signals_table(signals)
@@ -670,6 +689,8 @@ def create_simple_app():
     )
     def generate_signal_on_click(n_clicks, symbol, timeframe):
         """Генерация сигнала по клику - использует независимый сканер!"""
+        global _dashboard_cache
+        
         if not n_clicks:
             return "", False, "", "info"
         
@@ -678,6 +699,18 @@ def create_simple_app():
             signal = signal_scanner.scan_single(symbol)
             
             if signal:
+                # Добавляем сигнал в кэш для отображения в таблице
+                if 'signals_cache' not in _dashboard_cache:
+                    _dashboard_cache['signals_cache'] = []
+                
+                # Проверяем, нет ли уже такого сигнала (по символу и типу)
+                existing = [s for s in _dashboard_cache['signals_cache'] 
+                           if s.symbol == signal.symbol and s.signal_type == signal.signal_type]
+                if not existing:
+                    _dashboard_cache['signals_cache'].insert(0, signal)  # В начало
+                    # Лимит 10 сигналов
+                    _dashboard_cache['signals_cache'] = _dashboard_cache['signals_cache'][:10]
+                
                 # Определяем цвет и иконку
                 if signal.signal_type == "LONG":
                     icon = "success"
@@ -719,6 +752,10 @@ def create_simple_app():
                         html.Small(f"✓ {' • '.join(signal.indicators[:4])}", 
                                   style={"color": "#4CAF50", "fontSize": "11px"})
                     ], style={"marginTop": "8px"}),
+                    html.Div([
+                        html.Small("Сигнал добавлен в таблицу Active Signals", 
+                                  style={"color": "#888", "fontSize": "10px", "fontStyle": "italic"})
+                    ], style={"marginTop": "8px"}),
                 ], style={"backgroundColor": bg_color, "padding": "10px", "borderRadius": "5px"})
                 
                 return content, True, header, icon
@@ -739,27 +776,36 @@ def create_simple_app():
             Output("signal-toast", "is_open", allow_duplicate=True),
             Output("signal-toast", "header", allow_duplicate=True),
             Output("signal-toast", "icon", allow_duplicate=True),
+            Output("signals-table", "children", allow_duplicate=True),  # Обновляем таблицу!
         ],
         [Input("scan-all-btn", "n_clicks")],
         prevent_initial_call=True
     )
     def scan_all_coins(n_clicks):
         """Сканирование всех 50 монет для поиска сигналов."""
+        global _dashboard_cache
+        
         if not n_clicks:
-            return "", False, "", "info"
+            return "", False, "", "info", dash.no_update
         
         try:
             # Сканируем все монеты
             signals = signal_scanner.scan_all()
             
             if signals:
-                # Берём топ-5 лучших сигналов
+                # Сохраняем ВСЕ сигналы в кэш для отображения в таблице
+                _dashboard_cache['signals_cache'] = signals[:10]  # Топ-10 в таблицу
+                
+                # Создаём таблицу сигналов
+                signals_table = create_signals_table(signals[:10])
+                
+                # Берём топ-5 для Toast
                 top_signals = signals[:5]
                 
                 content = html.Div([
                     html.P([
                         html.Strong(f"Найдено {len(signals)} сигналов"),
-                        html.Span(" (топ-5 показаны)", style={"color": "#888"})
+                        html.Span(" (добавлены в таблицу)", style={"color": "#888"})
                     ], style={"marginBottom": "10px"}),
                     html.Hr(style={"margin": "8px 0", "borderColor": "#444"}),
                 ] + [
@@ -773,18 +819,23 @@ def create_simple_app():
                         html.Span(f" ({s.confidence:.0%})", style={"color": "#ffd700", "marginLeft": "5px"}),
                     ], style={"marginBottom": "5px"})
                     for s in top_signals
+                ] + [
+                    html.Div([
+                        html.Small("💡 Все сигналы добавлены в таблицу Active Signals", 
+                                  style={"color": "#888", "fontSize": "10px", "fontStyle": "italic"})
+                    ], style={"marginTop": "10px"}),
                 ])
                 
-                return content, True, f"🔍 Найдено {len(signals)} сигналов", "success"
+                return content, True, f"🔍 Найдено {len(signals)} сигналов", "success", signals_table
             else:
                 return html.P(
                     "Нет сигналов в данный момент. Рынок в состоянии неопределённости.",
                     style={"color": "#888"}
-                ), True, "ℹ️ Нет сигналов", "info"
+                ), True, "ℹ️ Нет сигналов", "info", html.P("Нет активных сигналов", className="text-muted text-center p-4")
                 
         except Exception as e:
             logger.error(f"Ошибка сканирования: {e}", exc_info=True)
-            return html.P(f"Ошибка: {str(e)}", style={"color": "#ff3366"}), True, "❌ Ошибка", "danger"
+            return html.P(f"Ошибка: {str(e)}", style={"color": "#ff3366"}), True, "❌ Ошибка", "danger", dash.no_update
 
     # Clientside callback для realtime часов (без задержки!)
     app.clientside_callback(
@@ -1011,15 +1062,36 @@ def create_signals_table(signals: list):
 
     data = []
     for signal in signals:
-        data.append({
-            "Time": signal.timestamp.strftime("%H:%M:%S"),
-            "Type": signal.signal_type,
-            "Entry": f"${signal.entry_price:,.2f}",
-            "TP": f"${signal.take_profit:.2f}",
-            "SL": f"${signal.stop_loss:.2f}",
-            "R:R": f"{signal.risk_reward_ratio:.2f}",
-            "Confidence": f"{signal.confidence:.1%}",
-        })
+        # Поддержка разных форматов сигналов
+        try:
+            timestamp = signal.timestamp.strftime("%H:%M:%S") if hasattr(signal, 'timestamp') else "N/A"
+            signal_type = getattr(signal, 'signal_type', 'N/A')
+            entry = getattr(signal, 'entry_price', 0)
+            tp = getattr(signal, 'take_profit', 0)
+            sl = getattr(signal, 'stop_loss', 0)
+            conf = getattr(signal, 'confidence', 0)
+            
+            # Risk/Reward - поддержка обоих вариантов
+            rr = getattr(signal, 'risk_reward', None) or getattr(signal, 'risk_reward_ratio', 0)
+            if callable(rr):
+                rr = rr()
+            
+            data.append({
+                "Время": timestamp,
+                "Пара": getattr(signal, 'symbol', 'N/A'),
+                "Тип": "🟢 LONG" if signal_type == "LONG" else "🔴 SHORT",
+                "Entry": f"${entry:,.4f}",
+                "TP": f"${tp:,.4f}",
+                "SL": f"${sl:,.4f}",
+                "R:R": f"1:{rr:.1f}" if rr else "N/A",
+                "Conf": f"{conf:.0%}",
+            })
+        except Exception as e:
+            logger.debug(f"Ошибка формирования строки сигнала: {e}")
+            continue
+
+    if not data:
+        return html.P("Нет активных сигналов", className="text-muted text-center p-4")
 
     return dash_table.DataTable(
         data=data,
@@ -1027,14 +1099,14 @@ def create_signals_table(signals: list):
         style_table={'overflowX': 'auto'},
         style_cell={
             'backgroundColor': '#1e1e1e', 'color': '#e0e0e0', 'border': '1px solid #333',
-            'textAlign': 'left', 'padding': '10px'
+            'textAlign': 'center', 'padding': '8px', 'fontSize': '13px'
         },
-        style_header={'backgroundColor': '#2a2a2a', 'fontWeight': 'bold'},
+        style_header={'backgroundColor': '#2a2a2a', 'fontWeight': 'bold', 'color': '#00d4ff'},
         style_data_conditional=[
-            {'if': {'filter_query': '{Type} = "LONG"'}, 'backgroundColor': '#1a3d2e'},
-            {'if': {'filter_query': '{Type} = "SHORT"'}, 'backgroundColor': '#3d1a2e'},
+            {'if': {'filter_query': '{Тип} contains "LONG"'}, 'backgroundColor': '#1a3d2e'},
+            {'if': {'filter_query': '{Тип} contains "SHORT"'}, 'backgroundColor': '#3d1a2e'},
         ],
-        page_size=10,
+        page_size=5,
     )
 
 
