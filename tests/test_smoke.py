@@ -66,9 +66,9 @@ class TestSmokeImports:
 
     def test_import_delta(self):
         """Проверка импорта Delta."""
-        from indicators.footprint.delta import DeltaCalculator
+        from indicators.footprint.delta import DeltaAnalyzer
 
-        assert DeltaCalculator is not None
+        assert DeltaAnalyzer is not None
 
     def test_import_risk_manager(self):
         """Проверка импорта Risk Manager."""
@@ -78,9 +78,9 @@ class TestSmokeImports:
 
     def test_import_confluence(self):
         """Проверка импорта Confluence."""
-        from utils.confluence import ConfluenceAnalyzer
+        from utils.confluence import ConfluenceCalculator
 
-        assert ConfluenceAnalyzer is not None
+        assert ConfluenceCalculator is not None
 
     def test_import_strategy(self):
         """Проверка импорта стратегии."""
@@ -122,16 +122,15 @@ class TestSmokeBasicFunctionality:
         """Проверка создания экземпляра RiskManager."""
         from utils.risk_manager import RiskManager
 
-        manager = RiskManager(account_balance=10000.0, risk_per_trade=0.01)
+        manager = RiskManager(risk_per_trade=0.01)
         assert manager is not None
-        assert manager.account_balance == 10000.0
         assert manager.risk_per_trade == 0.01
 
     def test_confluence_analyzer_instantiation(self):
-        """Проверка создания экземпляра ConfluenceAnalyzer."""
-        from utils.confluence import ConfluenceAnalyzer
+        """Проверка создания экземпляра ConfluenceCalculator."""
+        from utils.confluence import ConfluenceCalculator
 
-        analyzer = ConfluenceAnalyzer()
+        analyzer = ConfluenceCalculator()
         assert analyzer is not None
 
 
@@ -166,13 +165,15 @@ class TestSmokeDataProcessing:
     def test_order_block_detection_with_sample_data(self, sample_dataframe):
         """Проверка обнаружения Order Blocks с тестовыми данными."""
         from indicators.smart_money.order_blocks import OrderBlockDetector
+        import pandas as pd
 
         detector = OrderBlockDetector()
-        order_blocks = detector.detect(sample_dataframe)
+        result = detector.detect_order_blocks(sample_dataframe)
 
-        # Order blocks могут быть пустыми для тестовых данных
-        assert order_blocks is not None
-        assert isinstance(order_blocks, list)
+        # Должен вернуть DataFrame с новыми колонками
+        assert result is not None
+        assert isinstance(result, pd.DataFrame)
+        assert "ob_type" in result.columns
 
 
 @pytest.mark.smoke
