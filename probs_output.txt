@@ -1,0 +1,29 @@
+Loading model...
+Model loaded. Features: 68
+Data loaded: 200 candles
+Features created: (151, 68)
+
+Probability distribution:
+Shape: (151, 3)
+Columns: [SELL, HOLD, BUY]
+
+SELL probs - min: 0.3184, max: 0.3238, mean: 0.3196
+HOLD probs - min: 0.3513, max: 0.3620, mean: 0.3613
+BUY probs  - min: 0.3184, max: 0.3270, mean: 0.3191
+
+Last 10 predictions:
+  0: SELL=0.3196, HOLD=0.3620, BUY=0.3184
+  1: SELL=0.3196, HOLD=0.3620, BUY=0.3184
+  2: SELL=0.3196, HOLD=0.3620, BUY=0.3184
+  3: SELL=0.3196, HOLD=0.3620, BUY=0.3184
+  4: SELL=0.3196, HOLD=0.3620, BUY=0.3184
+  5: SELL=0.3184, HOLD=0.3608, BUY=0.3208
+  6: SELL=0.3184, HOLD=0.3608, BUY=0.3208
+  7: SELL=0.3184, HOLD=0.3608, BUY=0.3208
+  8: SELL=0.3213, HOLD=0.3550, BUY=0.3237
+  9: SELL=0.3213, HOLD=0.3550, BUY=0.3237
+
+Argmax distribution:
+  HOLD: 151 (100.0%)
+
+DONE

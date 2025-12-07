@@ -324,26 +324,36 @@ class LightGBMSignalGenerator:
             X_scaled, y, test_size=test_size, shuffle=False
         )
         
-        # Calculate class weights for imbalanced data
+        # Calculate SOFTER class weights for imbalanced data
+        # Use sqrt to reduce weight intensity
         from collections import Counter
         class_counts = Counter(y_train)
         total = len(y_train)
-        class_weights = {cls: total / (len(class_counts) * count) for cls, count in class_counts.items()}
+        # Softer weights: sqrt instead of full inverse
+        class_weights = {cls: np.sqrt(total / (len(class_counts) * count)) for cls, count in class_counts.items()}
         sample_weights = np.array([class_weights[y] for y in y_train])
+        
+        logger.info(f"Class distribution: {dict(class_counts)}")
+        logger.info(f"Class weights (sqrt): {class_weights}")
 
         # Create datasets with weights
         train_data = lgb.Dataset(X_train, label=y_train, weight=sample_weights, feature_name=self.feature_names)
         valid_data = lgb.Dataset(X_test, label=y_test, reference=train_data)
         
-        # Train model
+        # Use updated params with higher learning rate for faster convergence
+        train_params = self.params.copy()
+        train_params['learning_rate'] = 0.05  # Faster learning
+        train_params['min_data_in_leaf'] = 50  # Prevent overfitting
+        
+        # Train model with more patience
         self.model = lgb.train(
-            self.params,
+            train_params,
             train_data,
             num_boost_round=num_boost_round,
             valid_sets=[valid_data],
             callbacks=[
-                lgb.early_stopping(stopping_rounds=early_stopping_rounds),
-                lgb.log_evaluation(period=100),
+                lgb.early_stopping(stopping_rounds=max(50, early_stopping_rounds)),  # Min 50 rounds patience
+                lgb.log_evaluation(period=50),
             ],
         )
         
@@ -471,14 +481,21 @@ class LightGBMSignalGenerator:
         # probs order: [SELL, HOLD, BUY] (0, 1, 2)
         predictions = np.ones(len(probs), dtype=int)  # Default HOLD
 
-        buy_threshold = 0.08  # Lower threshold based on actual model output
-        sell_threshold = 0.08
+        # Dynamic thresholds based on mean probabilities
+        # Only generate signal if probability is significantly above average
+        mean_sell = np.mean(probs[:, 0])
+        mean_buy = np.mean(probs[:, 2])
+        
+        # Require 10% above mean for signal
+        buy_threshold = mean_buy + 0.03
+        sell_threshold = mean_sell + 0.03
+        min_diff = 0.02  # Signal must be at least 2% more confident than opposite
 
         for i, prob in enumerate(probs):
             sell_prob, hold_prob, buy_prob = prob
-            if buy_prob > buy_threshold and buy_prob > sell_prob:
+            if buy_prob > buy_threshold and (buy_prob - sell_prob) > min_diff:
                 predictions[i] = 2  # BUY
-            elif sell_prob > sell_threshold and sell_prob > buy_prob:
+            elif sell_prob > sell_threshold and (sell_prob - buy_prob) > min_diff:
                 predictions[i] = 0  # SELL
             # else: HOLD (already set)
 
