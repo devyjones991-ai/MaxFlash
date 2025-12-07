@@ -363,7 +363,8 @@ def create_all_features(
         for col, value in sm_features.items():
             all_features[col] = value
 
-    # Drop NaN values
+    # Replace infinity values with NaN, then drop NaN
+    all_features = all_features.replace([np.inf, -np.inf], np.nan)
     all_features = all_features.dropna()
 
     logger.debug(f"Created {len(all_features.columns)} features from OHLCV data")

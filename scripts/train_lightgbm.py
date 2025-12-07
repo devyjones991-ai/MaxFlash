@@ -110,7 +110,7 @@ def load_historical_data(
         for col in ['open', 'high', 'low', 'close', 'volume']:
             df[col] = df[col].astype(float)
 
-        logger.info(f"  ✓ Loaded {len(df)} candles for {symbol}")
+        logger.info(f"  [OK] Loaded {len(df)} candles for {symbol}")
 
         return df
 
@@ -154,9 +154,9 @@ def train_model():
         if df is not None and len(df) >= MIN_CANDLES:
             all_data.append(df)
             successful_coins.append(coin)
-            print(f"✓ {len(df):,} candles")
+            print(f"[OK] {len(df):,} candles")
         else:
-            print(f"✗ Insufficient data")
+            print(f"[SKIP] Insufficient data")
 
     # Combine all data
     if not all_data:
@@ -234,12 +234,12 @@ def train_model():
 
         model.save_model(str(model_path))
 
-        print(f"✓ Model saved: {model_path}")
+        print(f"[OK] Model saved: {model_path}")
 
         # Also save as latest
         latest_path = models_dir / "lightgbm_latest.pkl"
         model.save_model(str(latest_path))
-        print(f"✓ Model saved: {latest_path}")
+        print(f"[OK] Model saved: {latest_path}")
 
         # Save training metadata
         metadata_path = models_dir / f"training_metadata_{timestamp}.txt"
@@ -262,10 +262,10 @@ def train_model():
             for i, (feature, importance) in enumerate(metrics['top_features'][:20], 1):
                 f.write(f"  {i:2d}. {feature:40s} {importance:10.1f}\n")
 
-        print(f"✓ Metadata saved: {metadata_path}")
+        print(f"[OK] Metadata saved: {metadata_path}")
 
         print(f"\n{'='*80}")
-        print("TRAINING COMPLETE! 🎉")
+        print("TRAINING COMPLETE!")
         print(f"{'='*80}\n")
 
         return model, metrics
@@ -283,7 +283,7 @@ if __name__ == "__main__":
     print(f"\nEnd time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
 
     if result:
-        print("✓ Training succeeded!")
+        print("[SUCCESS] Training succeeded!")
     else:
-        print("✗ Training failed!")
+        print("[FAILED] Training failed!")
         sys.exit(1)
