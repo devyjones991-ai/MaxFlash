@@ -324,8 +324,15 @@ class LightGBMSignalGenerator:
             X_scaled, y, test_size=test_size, shuffle=False
         )
         
-        # Create datasets
-        train_data = lgb.Dataset(X_train, label=y_train, feature_name=self.feature_names)
+        # Calculate class weights for imbalanced data
+        from collections import Counter
+        class_counts = Counter(y_train)
+        total = len(y_train)
+        class_weights = {cls: total / (len(class_counts) * count) for cls, count in class_counts.items()}
+        sample_weights = np.array([class_weights[y] for y in y_train])
+
+        # Create datasets with weights
+        train_data = lgb.Dataset(X_train, label=y_train, weight=sample_weights, feature_name=self.feature_names)
         valid_data = lgb.Dataset(X_test, label=y_test, reference=train_data)
         
         # Train model
@@ -460,8 +467,20 @@ class LightGBMSignalGenerator:
         X_scaled = self.scaler.transform(X)
         probs = self.model.predict(X_scaled)
 
-        # Get class with highest probability
-        predictions = np.argmax(probs, axis=1)
+        # Use threshold-based logic instead of argmax
+        # probs order: [SELL, HOLD, BUY] (0, 1, 2)
+        predictions = np.ones(len(probs), dtype=int)  # Default HOLD
+
+        buy_threshold = 0.08  # Lower threshold based on actual model output
+        sell_threshold = 0.08
+
+        for i, prob in enumerate(probs):
+            sell_prob, hold_prob, buy_prob = prob
+            if buy_prob > buy_threshold and buy_prob > sell_prob:
+                predictions[i] = 2  # BUY
+            elif sell_prob > sell_threshold and sell_prob > buy_prob:
+                predictions[i] = 0  # SELL
+            # else: HOLD (already set)
 
         # Pad to match original df length (features have NaN removed)
         full_predictions = np.ones(len(df), dtype=int)  # Default HOLD
@@ -473,10 +492,80 @@ class LightGBMSignalGenerator:
         """Get feature importance scores."""
         if self.model is None:
             return {}
-        
+
         importance = self.model.feature_importance(importance_type='gain')
         return dict(zip(self.feature_names, importance))
-    
+
+    def incremental_train(self, df: pd.DataFrame, num_boost_round: int = 50) -> Dict[str, float]:
+        """
+        Incrementally train (fine-tune) the model on new data.
+
+        This is useful for online learning - the model adapts to recent market conditions
+        while retaining knowledge from previous training.
+
+        Args:
+            df: New OHLCV DataFrame with recent data
+            num_boost_round: Number of additional boosting rounds
+
+        Returns:
+            Training metrics
+        """
+        if self.model is None:
+            logger.warning("No base model for incremental training. Training from scratch.")
+            return self.train(df, use_new_features=True)
+
+        logger.info(f"Incremental training on {len(df)} new samples...")
+
+        # Prepare features
+        if self.feature_names and len(self.feature_names) > 64:
+            from ml.feature_engineering import create_all_features
+            features_df = create_all_features(df, smart_money_indicators=None, use_new_features=True)
+            X = features_df.values
+        else:
+            X, _ = self._prepare_features(df)
+
+        # Create labels
+        y = self._create_labels(df)
+
+        # Align lengths
+        min_len = min(len(X), len(y))
+        X = X[:min_len]
+        y = y[:min_len]
+
+        # Scale with existing scaler
+        X_scaled = self.scaler.transform(X)
+
+        # Calculate class weights
+        from collections import Counter
+        class_counts = Counter(y)
+        total = len(y)
+        class_weights = {cls: total / (len(class_counts) * count) for cls, count in class_counts.items()}
+        sample_weights = np.array([class_weights[label] for label in y])
+
+        # Create dataset
+        new_data = lgb.Dataset(X_scaled, label=y, weight=sample_weights, feature_name=self.feature_names)
+
+        # Continue training from existing model
+        self.model = lgb.train(
+            self.params,
+            new_data,
+            num_boost_round=num_boost_round,
+            init_model=self.model,  # Continue from existing model
+            callbacks=[lgb.log_evaluation(period=10)],
+        )
+
+        # Evaluate
+        y_pred = np.argmax(self.model.predict(X_scaled), axis=1)
+        accuracy = accuracy_score(y, y_pred)
+
+        logger.info(f"Incremental training complete - Accuracy: {accuracy:.4f}")
+
+        return {
+            'accuracy': accuracy,
+            'samples': len(y),
+            'iterations': num_boost_round
+        }
+
     def save_model(self, path: str):
         """Save model and scaler to disk."""
         if self.model is None:
