@@ -60,7 +60,7 @@ class ComprehensiveBacktester:
 
         # Generate predictions
         try:
-            predictions = model.predict(df)
+            predictions = model.predict_batch(df)
         except Exception as e:
             logger.warning(f"Prediction failed: {e}")
             return None

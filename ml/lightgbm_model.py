@@ -386,9 +386,15 @@ class LightGBMSignalGenerator:
                 'timestamp': datetime.now().isoformat(),
             }
         
-        # Prepare features
-        X, _ = self._prepare_features(df)
-        
+        # Prepare features - use enhanced features if model was trained with them
+        if self.feature_names and len(self.feature_names) > 64:
+            # Model trained with enhanced features (68 features)
+            from ml.feature_engineering import create_all_features
+            features_df = create_all_features(df, smart_money_indicators=None, use_new_features=True)
+            X = features_df.values
+        else:
+            X, _ = self._prepare_features(df)
+
         if len(X) == 0:
             return {
                 'action': 'HOLD',
@@ -425,7 +431,44 @@ class LightGBMSignalGenerator:
             },
             'timestamp': datetime.now().isoformat(),
         }
-    
+
+    def predict_batch(self, df: pd.DataFrame) -> np.ndarray:
+        """
+        Generate predictions for all rows in DataFrame.
+
+        Args:
+            df: OHLCV DataFrame
+
+        Returns:
+            Array of predictions (0=SELL, 1=HOLD, 2=BUY)
+        """
+        if self.model is None:
+            return np.ones(len(df), dtype=int)  # All HOLD
+
+        # Prepare features - use enhanced features if model was trained with them
+        if self.feature_names and len(self.feature_names) > 64:
+            from ml.feature_engineering import create_all_features
+            features_df = create_all_features(df, smart_money_indicators=None, use_new_features=True)
+            X = features_df.values
+        else:
+            X, _ = self._prepare_features(df)
+
+        if len(X) == 0:
+            return np.ones(len(df), dtype=int)
+
+        # Scale and predict
+        X_scaled = self.scaler.transform(X)
+        probs = self.model.predict(X_scaled)
+
+        # Get class with highest probability
+        predictions = np.argmax(probs, axis=1)
+
+        # Pad to match original df length (features have NaN removed)
+        full_predictions = np.ones(len(df), dtype=int)  # Default HOLD
+        full_predictions[-len(predictions):] = predictions
+
+        return full_predictions
+
     def get_feature_importance(self) -> Dict[str, float]:
         """Get feature importance scores."""
         if self.model is None:
@@ -493,6 +536,7 @@ def get_lightgbm_generator() -> LightGBMSignalGenerator:
             logger.error(f"Failed to create LightGBM generator: {e}")
             raise
     return _lightgbm_generator
+
 
 
 
