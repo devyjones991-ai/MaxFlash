@@ -209,11 +209,11 @@ def run_comprehensive_backtest():
     model_path = Path(__file__).parent.parent / "models" / "lightgbm_latest.pkl"
 
     if not model_path.exists():
-        print(f"\n✗ Model not found: {model_path}")
+        print(f"\n[FAILED] Model not found: {model_path}")
         print("  Please run train_lightgbm.py first!")
         return
 
-    print(f"\n✓ Loading model: {model_path}")
+    print(f"\n[OK] Loading model: {model_path}")
     model = LightGBMSignalGenerator(model_path=str(model_path))
 
     # Initialize backtester
@@ -233,7 +233,7 @@ def run_comprehensive_backtest():
         df = load_data(coin, days_back=180, timeframe='15m')
 
         if df is None or len(df) < 1000:
-            print("✗ Insufficient data")
+            print("[SKIP] Insufficient data")
             continue
 
         # Run backtest
@@ -244,16 +244,16 @@ def run_comprehensive_backtest():
                 metrics['coin'] = coin
                 all_results.append(metrics)
 
-                print(f"✓ Return: {metrics['total_return']:+6.2f}% | WR: {metrics['win_rate']:5.1f}% | PF: {metrics['profit_factor']:4.2f}")
+                print(f"[OK] Return: {metrics['total_return']:+6.2f}% | WR: {metrics['win_rate']:5.1f}% | PF: {metrics['profit_factor']:4.2f}")
             else:
-                print("✗ No trades")
+                print("[SKIP] No trades")
 
         except Exception as e:
-            print(f"✗ Error: {e}")
+            print(f"[ERROR] {e}")
 
     # Aggregate results
     if not all_results:
-        print("\n✗ No successful backtests!")
+        print("\n[FAILED] No successful backtests!")
         return
 
     df_results = pd.DataFrame(all_results)
@@ -293,7 +293,7 @@ def run_comprehensive_backtest():
     csv_path = output_dir / f"backtest_{timestamp}.csv"
     df_results.to_csv(csv_path, index=False)
 
-    print(f"\n✓ Results saved: {csv_path}")
+    print(f"\n[OK] Results saved: {csv_path}")
 
     # Summary
     print(f"\n{'='*80}")
@@ -304,19 +304,19 @@ def run_comprehensive_backtest():
     print(f"Profitable coins: {profitable_coins}/{len(df_results)} ({profitable_coins/len(df_results)*100:.1f}%)")
 
     if df_results['win_rate'].mean() > 60:
-        print("✅ Win rate target ACHIEVED (>60%)")
+        print("[PASS] Win rate target ACHIEVED (>60%)")
     else:
-        print(f"❌ Win rate target NOT achieved ({df_results['win_rate'].mean():.1f}% < 60%)")
+        print(f"[FAIL] Win rate target NOT achieved ({df_results['win_rate'].mean():.1f}% < 60%)")
 
     if df_results['profit_factor'].mean() > 2.5:
-        print("✅ Profit factor target ACHIEVED (>2.5)")
+        print("[PASS] Profit factor target ACHIEVED (>2.5)")
     else:
-        print(f"❌ Profit factor target NOT achieved ({df_results['profit_factor'].mean():.2f} < 2.5)")
+        print(f"[FAIL] Profit factor target NOT achieved ({df_results['profit_factor'].mean():.2f} < 2.5)")
 
     if df_results['max_drawdown'].mean() < 10:
-        print("✅ Max drawdown target ACHIEVED (<10%)")
+        print("[PASS] Max drawdown target ACHIEVED (<10%)")
     else:
-        print(f"❌ Max drawdown target NOT achieved ({df_results['max_drawdown'].mean():.1f}% > 10%)")
+        print(f"[FAIL] Max drawdown target NOT achieved ({df_results['max_drawdown'].mean():.1f}% > 10%)")
 
     print()
 
