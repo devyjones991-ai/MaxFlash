@@ -76,6 +76,49 @@ def run_telegram_bot():
     return subprocess.Popen([sys.executable, "run_bot.py"], cwd=PROJECT_ROOT)
 
 
+def run_auto_retrain_scheduler():
+    """Start automatic model retraining scheduler (runs every 24 hours)."""
+    import schedule
+
+    def run_retrain():
+        print_status("Running scheduled model retraining...", "INFO")
+        try:
+            result = subprocess.run(
+                [sys.executable, "scripts/auto_retrain.py"],
+                cwd=PROJECT_ROOT,
+                capture_output=True,
+                text=True,
+                timeout=600  # 10 minute timeout
+            )
+            if result.returncode == 0:
+                print_status("Auto-retrain completed successfully", "INFO")
+            else:
+                print_status(f"Auto-retrain failed: {result.stderr[:200]}", "WARN")
+        except subprocess.TimeoutExpired:
+            print_status("Auto-retrain timed out", "WARN")
+        except Exception as e:
+            print_status(f"Auto-retrain error: {e}", "ERROR")
+
+    # Schedule daily at 3 AM (low trading activity)
+    schedule.every().day.at("03:00").do(run_retrain)
+    # Also run once at startup after 5 minutes
+    schedule.every(5).minutes.do(run_retrain).tag('startup')
+
+    print_status("Auto-retrain scheduler started (runs daily at 03:00)", "INFO")
+
+    def scheduler_loop():
+        while True:
+            schedule.run_pending()
+            # Remove startup job after first run
+            if schedule.get_jobs('startup'):
+                schedule.clear('startup')
+            time.sleep(60)
+
+    thread = threading.Thread(target=scheduler_loop, daemon=True)
+    thread.start()
+    return thread
+
+
 def run_dashboard(port=8050):
     """Start Web Dashboard."""
     print_status(f"Starting Dashboard on port {port}...", "INFO")
@@ -118,6 +161,11 @@ def main():
 
         if args.command in ["bot", "all"]:
             processes.append(run_telegram_bot())
+            # Start auto-retrain scheduler with bot
+            try:
+                run_auto_retrain_scheduler()
+            except ImportError:
+                print_status("Schedule not installed. Run: pip install schedule", "WARN")
 
         if args.command in ["dashboard", "all"]:
             processes.append(run_dashboard(args.port))
