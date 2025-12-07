@@ -18,16 +18,17 @@ from utils.logger_config import setup_logging
 logger = setup_logging()
 
 # Top 50 coins by market cap (excluding stablecoins)
+# Updated: MATIC->POL, EOS->WIF, RNDR->RENDER (Binance Futures updates Dec 2024)
 TOP_50_COINS = [
     "BTC/USDT", "ETH/USDT", "BNB/USDT", "SOL/USDT", "XRP/USDT",
-    "ADA/USDT", "AVAX/USDT", "DOGE/USDT", "DOT/USDT", "MATIC/USDT",
+    "ADA/USDT", "AVAX/USDT", "DOGE/USDT", "DOT/USDT", "POL/USDT",
     "TRX/USDT", "LINK/USDT", "ATOM/USDT", "UNI/USDT", "LTC/USDT",
     "XLM/USDT", "NEAR/USDT", "ALGO/USDT", "BCH/USDT", "FIL/USDT",
     "ARB/USDT", "OP/USDT", "APT/USDT", "SUI/USDT", "INJ/USDT",
     "SEI/USDT", "RUNE/USDT", "FET/USDT", "GRT/USDT", "SAND/USDT",
-    "MANA/USDT", "AXS/USDT", "THETA/USDT", "XTZ/USDT", "EOS/USDT",
+    "MANA/USDT", "AXS/USDT", "THETA/USDT", "XTZ/USDT", "WIF/USDT",
     "AAVE/USDT", "MKR/USDT", "SNX/USDT", "CRV/USDT", "LDO/USDT",
-    "IMX/USDT", "RNDR/USDT", "FTM/USDT", "APE/USDT", "CHZ/USDT",
+    "IMX/USDT", "RENDER/USDT", "FTM/USDT", "APE/USDT", "CHZ/USDT",
     "EGLD/USDT", "FLOW/USDT", "ICP/USDT", "HBAR/USDT", "QNT/USDT"
 ]
 
