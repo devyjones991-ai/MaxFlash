@@ -21,7 +21,14 @@
       "Bash(timeout 10 py:*)",
       "Bash(timeout 10 echo:*)",
       "Bash(timeout 15 echo:*)",
-      "Bash(xargs:*)"
+      "Bash(xargs:*)",
+      "Bash(timeout 120 py:*)",
+      "Bash(timeout 30 py:*)",
+      "Bash(timeout 180 py:*)",
+      "Bash(timeout 300 py:*)",
+      "Bash(timeout 420 py:*)",
+      "Bash(timeout 60 py:*)",
+      "Bash(timeout 600 py:*)"
     ],
     "deny": [],
     "ask": []

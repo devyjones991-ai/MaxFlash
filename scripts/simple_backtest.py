@@ -37,7 +37,7 @@ try:
         
         # Load model
         model = LightGBMSignalGenerator()
-        model.load_model('models/lightgbm_quick.pkl')
+        model.load_model('models/lightgbm_latest.pkl')
         log(f"Model loaded. Features: {len(model.feature_names)}")
         
         # Get data

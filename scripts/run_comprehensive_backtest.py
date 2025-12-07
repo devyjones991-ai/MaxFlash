@@ -17,17 +17,17 @@ from utils.logger_config import setup_logging
 
 logger = setup_logging()
 
-# Top 50 coins
+# Top 50 coins (Updated: MATIC->POL, EOS->WIF, RNDR->RENDER)
 TOP_50_COINS = [
     "BTC/USDT", "ETH/USDT", "BNB/USDT", "SOL/USDT", "XRP/USDT",
-    "ADA/USDT", "AVAX/USDT", "DOGE/USDT", "DOT/USDT", "MATIC/USDT",
+    "ADA/USDT", "AVAX/USDT", "DOGE/USDT", "DOT/USDT", "POL/USDT",
     "TRX/USDT", "LINK/USDT", "ATOM/USDT", "UNI/USDT", "LTC/USDT",
     "XLM/USDT", "NEAR/USDT", "ALGO/USDT", "BCH/USDT", "FIL/USDT",
     "ARB/USDT", "OP/USDT", "APT/USDT", "SUI/USDT", "INJ/USDT",
     "SEI/USDT", "RUNE/USDT", "FET/USDT", "GRT/USDT", "SAND/USDT",
-    "MANA/USDT", "AXS/USDT", "THETA/USDT", "XTZ/USDT", "EOS/USDT",
+    "MANA/USDT", "AXS/USDT", "THETA/USDT", "XTZ/USDT", "WIF/USDT",
     "AAVE/USDT", "MKR/USDT", "SNX/USDT", "CRV/USDT", "LDO/USDT",
-    "IMX/USDT", "RNDR/USDT", "FTM/USDT", "APE/USDT", "CHZ/USDT",
+    "IMX/USDT", "RENDER/USDT", "FTM/USDT", "APE/USDT", "CHZ/USDT",
     "EGLD/USDT", "FLOW/USDT", "ICP/USDT", "HBAR/USDT", "QNT/USDT"
 ]
 
@@ -166,7 +166,7 @@ class ComprehensiveBacktester:
 def load_data(symbol: str, days_back: int = 180, timeframe: str = '15m'):
     """Load historical data for backtesting."""
     try:
-        exchange = ccxt.binance({'enableRateLimit': True})
+        exchange = ccxt.binance({'enableRateLimit': True, 'options': {'defaultType': 'future'}})
 
         end_time = datetime.now()
         start_time = end_time - timedelta(days=days_back)
@@ -227,7 +227,7 @@ def run_comprehensive_backtest():
     print(f"{'='*80}\n")
 
     for i, coin in enumerate(TOP_50_COINS, 1):
-        print(f"[{i}/{len(TOP_50_COINS)}] {coin:15s}...", end=" ")
+        print(f"[{i}/{len(TOP_50_COINS)}] {coin:15s}...", end=" ", flush=True)
 
         # Load data
         df = load_data(coin, days_back=180, timeframe='15m')

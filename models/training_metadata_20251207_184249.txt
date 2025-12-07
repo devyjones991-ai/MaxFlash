@@ -1,0 +1,77 @@
+Training Metadata
+================================================================================
+
+Date: 2025-12-07 18:42:50
+Coins used: 50
+Total samples: 864,001
+Timeframe: 15m
+Days back: 180
+Enhanced features: Yes (ADX, OBV, VWAP, Donchian)
+Total features: 68
+
+Accuracy: 0.8000
+Iterations: 3
+
+Coins:
+  - BTC/USDT
+  - ETH/USDT
+  - BNB/USDT
+  - SOL/USDT
+  - XRP/USDT
+  - ADA/USDT
+  - AVAX/USDT
+  - DOGE/USDT
+  - DOT/USDT
+  - POL/USDT
+  - TRX/USDT
+  - LINK/USDT
+  - ATOM/USDT
+  - UNI/USDT
+  - LTC/USDT
+  - XLM/USDT
+  - NEAR/USDT
+  - ALGO/USDT
+  - BCH/USDT
+  - FIL/USDT
+  - ARB/USDT
+  - OP/USDT
+  - APT/USDT
+  - SUI/USDT
+  - INJ/USDT
+  - SEI/USDT
+  - RUNE/USDT
+  - FET/USDT
+  - GRT/USDT
+  - SAND/USDT
+  - MANA/USDT
+  - AXS/USDT
+  - THETA/USDT
+  - XTZ/USDT
+  - WIF/USDT
+  - AAVE/USDT
+  - MKR/USDT
+  - SNX/USDT
+  - CRV/USDT
+  - LDO/USDT
+  - IMX/USDT
+  - RENDER/USDT
+  - FTM/USDT
+  - APE/USDT
+  - CHZ/USDT
+  - EGLD/USDT
+  - FLOW/USDT
+  - ICP/USDT
+  - HBAR/USDT
+  - QNT/USDT
+
+Top 20 features:
+   1. atr_ratio                                   39542.7
+   2. adx                                          3823.3
+   3. vwap                                         1758.3
+   4. volatility_20                                 409.9
+   5. volume_ma_20                                  362.3
+   6. hl_ratio                                      257.2
+   7. di_plus                                       199.9
+   8. volume_ma_5                                   195.6
+   9. sma_50_ratio                                  178.3
+  10. sma_5                                         174.7
