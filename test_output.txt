@@ -1,0 +1,24 @@
+Starting...
+Imports OK
+Loading model...
+Model loaded. Features: 68
+
+Fetching data...
+Data: 500 candles
+
+Generating predictions...
+
+=== PREDICTION DISTRIBUTION ===
+  SELL: 55 (11.0%)
+  HOLD: 443 (88.6%)
+  BUY: 2 (0.4%)
+
+=== PROBABILITY STATS ===
+
+ERROR: 'LightGBMSignalGenerator' object has no attribute 'feature_engineering'
+Traceback (most recent call last):
+  File "D:\MaxFlash\scripts\test_model.py", line 49, in <module>
+    features = m.feature_engineering.create_all_features(df).dropna()
+               ^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'LightGBMSignalGenerator' object has no attribute 'feature_engineering'
+

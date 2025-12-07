@@ -486,14 +486,14 @@ class LightGBMSignalGenerator:
         predictions = np.ones(len(probs), dtype=int)  # Default HOLD
 
         # Dynamic thresholds based on mean probabilities
-        # Only generate signal if probability is significantly above average
+        # Only generate signal if probability is above average
         mean_sell = np.mean(probs[:, 0])
         mean_buy = np.mean(probs[:, 2])
         
-        # Require 10% above mean for signal
-        buy_threshold = mean_buy + 0.03
-        sell_threshold = mean_sell + 0.03
-        min_diff = 0.02  # Signal must be at least 2% more confident than opposite
+        # Lower thresholds to get more signals
+        buy_threshold = mean_buy + 0.01  # 1% above mean
+        sell_threshold = mean_sell + 0.01  # 1% above mean
+        min_diff = 0.01  # Signal must be at least 1% more confident than opposite
 
         for i, prob in enumerate(probs):
             sell_prob, hold_prob, buy_prob = prob

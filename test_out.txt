@@ -1,0 +1,16 @@
+TEST START
+Imports OK
+Model: 68 features
+Data: 500 candles
+
+=== PREDICTION DISTRIBUTION ===
+  SELL: 110 (22.0%)
+  HOLD: 373 (74.6%)
+  BUY: 17 (3.4%)
+
+=== QUICK BACKTEST ===
+  Trades: 120
+  Wins: 53, Losses: 67
+  Win Rate: 44.2%
+
+DONE!

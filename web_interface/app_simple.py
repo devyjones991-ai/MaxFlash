@@ -1041,8 +1041,8 @@ def create_live_chart(df: pd.DataFrame, signals: list, symbol: str, timeframe: s
         template="plotly_dark", xaxis_rangeslider_visible=False, height=chart_height,
         hovermode='x unified', plot_bgcolor='#0a0a0a', paper_bgcolor='#1e1e1e',
         showlegend=True, legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-        # Preserve zoom/pan state on updates
-        uirevision='constant',
+        # Reset axes when symbol/timeframe changes (uirevision changes -> axes reset)
+        uirevision=f"{symbol}-{timeframe}",
         # Smooth transitions
         transition={'duration': 0},
     )
