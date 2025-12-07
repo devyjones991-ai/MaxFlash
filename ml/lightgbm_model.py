@@ -340,19 +340,23 @@ class LightGBMSignalGenerator:
         train_data = lgb.Dataset(X_train, label=y_train, weight=sample_weights, feature_name=self.feature_names)
         valid_data = lgb.Dataset(X_test, label=y_test, reference=train_data)
         
-        # Use updated params with higher learning rate for faster convergence
+        # Use updated params optimized for diverse predictions
         train_params = self.params.copy()
-        train_params['learning_rate'] = 0.05  # Faster learning
-        train_params['min_data_in_leaf'] = 50  # Prevent overfitting
-        
-        # Train model with more patience
+        train_params['learning_rate'] = 0.01  # Slower learning for stability
+        train_params['min_data_in_leaf'] = 100  # More data per leaf
+        train_params['num_leaves'] = 31  # Default, not too complex
+        train_params['feature_fraction'] = 0.8  # Use 80% features per tree
+        train_params['bagging_fraction'] = 0.8  # Use 80% data per iteration
+        train_params['bagging_freq'] = 5  # Bagging every 5 iterations
+
+        # Train model - use fixed iterations, no early stopping
+        # Early stopping was causing model to pick iteration 1 (underfitting)
         self.model = lgb.train(
             train_params,
             train_data,
-            num_boost_round=num_boost_round,
+            num_boost_round=200,  # Fixed 200 iterations
             valid_sets=[valid_data],
             callbacks=[
-                lgb.early_stopping(stopping_rounds=max(50, early_stopping_rounds)),  # Min 50 rounds patience
                 lgb.log_evaluation(period=50),
             ],
         )
