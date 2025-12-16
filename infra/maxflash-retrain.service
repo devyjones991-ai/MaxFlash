@@ -1,0 +1,24 @@
+[Unit]
+Description=MaxFlash ML Model Auto-Retrain
+After=network.target
+
+[Service]
+Type=oneshot
+User=devyjones
+Group=devyjones
+WorkingDirectory=/home/devyjones/MaxFlash
+EnvironmentFile=/home/devyjones/MaxFlash/.env
+Environment="PYTHONPATH=/home/devyjones/MaxFlash"
+ExecStart=/home/devyjones/MaxFlash/venv/bin/python scripts/auto_retrain.py
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=maxflash-retrain
+
+# Give enough time for training
+TimeoutStartSec=1800
+
+[Install]
+WantedBy=multi-user.target
+

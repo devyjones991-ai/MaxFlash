@@ -61,14 +61,18 @@ async def download_training_data(
     return valid_data
 
 
-def prepare_training_labels(df: pd.DataFrame, forward_periods: int = 5, threshold: float = 0.01) -> pd.Series:
+def prepare_training_labels(df: pd.DataFrame, forward_periods: int = 8, threshold: float = 0.005) -> pd.Series:
     """
     Create training labels based on future price movement.
+    
+    UPDATED: More sensitive thresholds for volatile crypto market:
+    - threshold: 0.5% (was 1%) - captures smaller moves
+    - forward_periods: 8 (was 5) - 2 hours on 15m chart for better signal capture
 
     Args:
         df: OHLCV DataFrame
-        forward_periods: Periods to look ahead
-        threshold: Price change threshold for signal
+        forward_periods: Periods to look ahead (8 periods = 2h on 15m)
+        threshold: Price change threshold for signal (0.5%)
 
     Returns:
         Series with labels (0=sell, 1=hold, 2=buy)
@@ -77,10 +81,10 @@ def prepare_training_labels(df: pd.DataFrame, forward_periods: int = 5, threshol
 
     labels = pd.Series(1, index=df.index)  # Default: HOLD
 
-    # BUY signal if price goes up > threshold
+    # BUY signal if price goes up > threshold (0.5%)
     labels[future_returns > threshold] = 2
 
-    # SELL signal if price goes down > threshold
+    # SELL signal if price goes down > threshold (-0.5%)
     labels[future_returns < -threshold] = 0
 
     return labels

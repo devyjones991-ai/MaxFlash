@@ -70,7 +70,8 @@ class SignalService:
 
     async def analyze_symbol(self, symbol: str) -> SignalResult:
         """
-        Analyze a single symbol and return a signal.
+        Analyze symbol using EXACT same logic as dashboard.
+        Pure score-based system without ML conflict blocking.
         """
         logger.info(f"Analyzing {symbol}...")
 
@@ -80,89 +81,190 @@ class SignalService:
             return self._create_neutral_signal(symbol, "Insufficient data")
 
         current_price = df["close"].iloc[-1]
+        
+        # Get 24h change
+        try:
+            ticker = self.data_manager.get_ticker(symbol)
+            change = ticker.get('percentage', 0) or 0
+        except:
+            if len(df) >= 96:
+                change = (current_price - df["close"].iloc[-96]) / df["close"].iloc[-96] * 100
+            else:
+                change = 0
 
-        # 2. ML Analysis
-        ml_signal = "NEUTRAL"
-        ml_confidence = 0.0
-        ml_probs = {}
-
-        if self.ml_model and self.ml_model.is_trained:
-            try:
-                prediction = self.ml_model.predict(df)
-                ml_signal = prediction["action"]
-                ml_confidence = prediction["confidence"]
-                ml_probs = prediction["probabilities"]
-            except Exception as e:
-                logger.error(f"ML prediction error for {symbol}: {e}")
-
-        # 3. Technical Analysis (Basic) & Filtering
-        # Calculate basic indicators for filter
-        indicators = self._calculate_basic_indicators(df)
-
-        # Validate/Adjust Confidence
-        adjusted_confidence = self.signal_filter.validate_signal(ml_signal, ml_confidence, indicators)
-
-        # 4. Determine Final Signal
-        final_signal_type = SignalType.NEUTRAL
-        if adjusted_confidence > settings.SIGNAL_CONFIDENCE_THRESHOLD:  # e.g. 0.7
-            final_signal_type = SignalType(ml_signal)
-
-        # 5. Risk Management
+        # Initialize scores
+        buy_score = 0
+        sell_score = 0
+        reasons = []
+        
+        # === 1. PRICE CHANGE (24h) ===
+        if change <= -5:
+            sell_score += 30
+            reasons.append(f"📉 Падение {change:.1f}%")
+        elif change <= -2:
+            sell_score += 20
+            reasons.append(f"📉 Снижение {change:.1f}%")
+        elif change <= -0.5:
+            sell_score += 10
+        elif change >= 5:
+            buy_score += 30
+            reasons.append(f"📈 Рост {change:+.1f}%")
+        elif change >= 2:
+            buy_score += 20
+            reasons.append(f"📈 Подъем {change:+.1f}%")
+        elif change >= 0.5:
+            buy_score += 10
+        
+        # === 2. OHLCV-based indicators ===
+        if len(df) >= 26:
+            close = df["close"]
+            
+            # --- RSI ---
+            delta = close.diff()
+            gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
+            loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
+            rs = gain / (loss + 1e-10)
+            rsi_series = 100 - (100 / (1 + rs))
+            rsi = rsi_series.iloc[-1]
+            rsi_prev = rsi_series.iloc[-2] if len(rsi_series) > 1 else rsi
+            rsi_trend = rsi - rsi_prev
+            
+            if rsi < 30:
+                buy_score += 25
+                reasons.append(f"RSI {rsi:.0f} (перепродано)")
+            elif rsi < 40:
+                buy_score += 15
+                reasons.append(f"RSI {rsi:.0f}↓")
+            elif rsi > 70:
+                sell_score += 25
+                reasons.append(f"RSI {rsi:.0f} (перекуплено)")
+            elif rsi > 60:
+                sell_score += 15
+                reasons.append(f"RSI {rsi:.0f}↑")
+            elif rsi < 45 and rsi_trend < 0:
+                sell_score += 10
+                reasons.append(f"RSI {rsi:.0f}⬇")
+            elif rsi > 55 and rsi_trend > 0:
+                buy_score += 10
+                reasons.append(f"RSI {rsi:.0f}⬆")
+            
+            # --- MACD (8-17-9) ---
+            ema_fast = close.ewm(span=8, adjust=False).mean()
+            ema_slow = close.ewm(span=17, adjust=False).mean()
+            macd_line = ema_fast - ema_slow
+            signal_line = macd_line.ewm(span=9, adjust=False).mean()
+            
+            macd = macd_line.iloc[-1]
+            macd_prev = macd_line.iloc[-2] if len(macd_line) > 1 else macd
+            signal = signal_line.iloc[-1]
+            signal_prev = signal_line.iloc[-2] if len(signal_line) > 1 else signal
+            
+            if macd_prev < signal_prev and macd > signal:
+                buy_score += 25
+                reasons.append("MACD пересечение⬆")
+            elif macd_prev > signal_prev and macd < signal:
+                sell_score += 25
+                reasons.append("MACD пересечение⬇")
+            elif macd > signal:
+                buy_score += 10
+                reasons.append("MACD+")
+            elif macd < signal:
+                sell_score += 10
+                reasons.append("MACD-")
+            
+            # --- Price vs MA ---
+            price = close.iloc[-1]
+            ma20 = close.rolling(20).mean().iloc[-1]
+            ma50 = close.rolling(50).mean().iloc[-1] if len(close) >= 50 else ma20
+            
+            if price > ma20 > ma50:
+                buy_score += 15
+                reasons.append("Тренд⬆")
+            elif price < ma20 < ma50:
+                sell_score += 15
+                reasons.append("Тренд⬇")
+            elif price < ma20:
+                sell_score += 5
+            elif price > ma20:
+                buy_score += 5
+        else:
+            # Simple signal based only on 24h change
+            if change <= -3:
+                sell_score += 15
+            elif change >= 3:
+                buy_score += 15
+            rsi = 50
+        
+        # === 3. CALCULATE CONFIDENCE ===
+        max_score = max(buy_score, sell_score)
+        
+        if max_score >= 60:
+            confidence = 0.85
+        elif max_score >= 45:
+            confidence = 0.75
+        elif max_score >= 30:
+            confidence = 0.60
+        elif max_score >= 20:
+            confidence = 0.50
+        else:
+            confidence = 0.40
+        
+        # === 4. DETERMINE SIGNAL (SAME AS DASHBOARD) ===
+        diff = buy_score - sell_score
+        
+        if diff >= 20:
+            final_signal_type = SignalType.BUY
+        elif diff <= -20:
+            final_signal_type = SignalType.SELL
+        elif diff >= 10:
+            final_signal_type = SignalType.BUY
+            confidence = min(confidence, 0.55)
+        elif diff <= -10:
+            final_signal_type = SignalType.SELL
+            confidence = min(confidence, 0.55)
+        elif diff > 0:
+            final_signal_type = SignalType.BUY
+            confidence = min(confidence, 0.45)
+        elif diff < 0:
+            final_signal_type = SignalType.SELL
+            confidence = min(confidence, 0.45)
+        else:
+            final_signal_type = SignalType.NEUTRAL
+            confidence = 0.5
+        
+        # === 5. RISK MANAGEMENT ===
         stop_loss = None
         take_profit = None
-
+        
         if final_signal_type != SignalType.NEUTRAL:
-            risk_params = settings.get_risk_params()
-            atr = indicators.get("atr", current_price * 0.02)
-
+            atr = (df["high"] - df["low"]).rolling(window=14).mean().iloc[-1]
+            
             if final_signal_type == SignalType.BUY:
                 stop_loss = current_price - (atr * 1.5)
                 take_profit = current_price + (atr * 3.0)
             else:
                 stop_loss = current_price + (atr * 1.5)
                 take_profit = current_price - (atr * 3.0)
-
-        # 6. Generate Reasoning (Deterministic, no LLM)
-        reasoning = []
-        if final_signal_type != SignalType.NEUTRAL:
-            # Build reasoning from indicators
-            reasons = []
-
-            # RSI analysis
-            rsi = indicators.get("rsi", 50)
-            if rsi > 70:
-                reasons.append(f"RSI overbought at {rsi:.1f}")
-            elif rsi < 30:
-                reasons.append(f"RSI oversold at {rsi:.1f}")
-            else:
-                reasons.append(f"RSI neutral at {rsi:.1f}")
-
-            # Volume analysis
-            vol_ratio = indicators.get("volume_ratio", 1.0)
-            if vol_ratio > 1.5:
-                reasons.append(f"Strong volume ({vol_ratio:.2f}x average)")
-            elif vol_ratio < 0.5:
-                reasons.append(f"Low volume ({vol_ratio:.2f}x average)")
-
-            # ML confidence
-            reasons.append(f"ML model confidence: {adjusted_confidence * 100:.1f}%")
-
-            # Create reasoning text
-            reasoning_text = f"{final_signal_type.value} signal detected. " + "; ".join(reasons)
-            reasoning.append(reasoning_text)
-        else:
-            reasoning.append("Signal confidence too low or neutral market conditions.")
+        
+        if not reasons:
+            reasons.append("Нейтральный рынок")
 
         return SignalResult(
             symbol=symbol,
             signal_type=final_signal_type,
-            confidence=adjusted_confidence,
+            confidence=confidence,
             timestamp=datetime.now(),
             price=current_price,
             stop_loss=stop_loss,
             take_profit=take_profit,
-            reasoning=reasoning,
-            metadata={"ml_probabilities": ml_probs, "indicators": indicators},
+            reasoning=reasons,
+            metadata={
+                "buy_score": buy_score,
+                "sell_score": sell_score,
+                "diff": diff,
+                "rsi": rsi if 'rsi' in dir() else 50,
+                "change": change
+            },
         )
 
     def _create_neutral_signal(self, symbol: str, reason: str) -> SignalResult:

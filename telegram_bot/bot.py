@@ -1,14 +1,6 @@
 """
-MaxFlash Telegram Bot
-Минималистичный но информативный бот для трейдинга.
-
-Команды:
-/start - Приветствие и меню
-/price [symbol] - Текущая цена (по умолчанию BTC/USDT)
-/signal [symbol] - Получить торговый сигнал
-/top - Топ-5 монет по изменению за 24ч
-/alerts - Управление алертами
-/status - Статус системы
+MaxFlash Telegram Bot v2.0
+Улучшенный интерфейс с выбором монет.
 """
 import asyncio
 import logging
@@ -41,163 +33,230 @@ BOT_TOKEN = "7865140777:AAEyYsYcqjey_6_cBOQOAq2I2kQxGRt5kek"
 
 # Инициализация менеджеров
 data_manager = MarketDataManager()
-signal_scanner = SignalScanner(data_manager=data_manager)  # Независимый сканер
+signal_scanner = SignalScanner(data_manager=data_manager)
 
-# Популярные пары
-POPULAR_PAIRS = ["BTC/USDT", "ETH/USDT", "SOL/USDT", "XRP/USDT", "BNB/USDT"]
+# ======================== КАТЕГОРИИ МОНЕТ ========================
+COINS_TOP = ["BTC", "ETH", "BNB", "SOL", "XRP"]
+COINS_LAYER1 = ["ADA", "AVAX", "DOT", "ATOM", "NEAR", "APT", "SUI"]
+COINS_DEFI = ["UNI", "AAVE", "LINK", "MKR", "CRV", "LDO", "SNX"]
+COINS_MEME = ["DOGE", "WIF", "PEPE", "SHIB", "FLOKI", "BONK"]
+COINS_AI = ["FET", "RENDER", "AGIX", "OCEAN", "TAO"]
+COINS_GAMING = ["AXS", "SAND", "MANA", "IMX", "GALA", "ENJ"]
+COINS_OTHER = ["LTC", "TRX", "XLM", "ALGO", "FIL", "ARB", "OP"]
 
-# Хранилище алертов пользователей
-user_alerts = {}  # {user_id: [{symbol, price_above, price_below}]}
+ALL_COINS = COINS_TOP + COINS_LAYER1 + COINS_DEFI + COINS_MEME + COINS_AI + COINS_GAMING + COINS_OTHER
+
+# Хранилище состояний пользователей
+user_states = {}  # {user_id: {'last_action': ..., 'page': ...}}
 
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Приветственное сообщение с главным меню."""
-    keyboard = [
+# ======================== КЛАВИАТУРЫ ========================
+
+def get_main_menu_keyboard():
+    """Главное меню."""
+    return InlineKeyboardMarkup([
         [
-            InlineKeyboardButton("📊 BTC", callback_data="price_BTC/USDT"),
-            InlineKeyboardButton("📊 ETH", callback_data="price_ETH/USDT"),
-            InlineKeyboardButton("📊 SOL", callback_data="price_SOL/USDT"),
+            InlineKeyboardButton("💰 Цена", callback_data="menu_price"),
+            InlineKeyboardButton("🎯 Сигнал", callback_data="menu_signal"),
         ],
         [
-            InlineKeyboardButton("🎯 Сигнал BTC", callback_data="signal_BTC/USDT"),
-            InlineKeyboardButton("🎯 Сигнал ETH", callback_data="signal_ETH/USDT"),
+            InlineKeyboardButton("🔍 СКАН 50 МОНЕТ", callback_data="scan_all"),
         ],
         [
-            InlineKeyboardButton("🔍 СКАН ВСЕХ 50", callback_data="scan_all"),
-        ],
-        [
-            InlineKeyboardButton("🔝 Топ-5", callback_data="top5"),
+            InlineKeyboardButton("🔝 Топ-5 24ч", callback_data="top5"),
             InlineKeyboardButton("📈 Статус", callback_data="status"),
         ],
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
+        [
+            InlineKeyboardButton("⚙️ Настройки", callback_data="settings"),
+        ]
+    ])
+
+
+def get_coin_categories_keyboard(action: str):
+    """Выбор категории монет."""
+    return InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("⭐ ТОП-5", callback_data=f"cat_{action}_top"),
+            InlineKeyboardButton("🔷 Layer-1", callback_data=f"cat_{action}_l1"),
+        ],
+        [
+            InlineKeyboardButton("💎 DeFi", callback_data=f"cat_{action}_defi"),
+            InlineKeyboardButton("🐕 Meme", callback_data=f"cat_{action}_meme"),
+        ],
+        [
+            InlineKeyboardButton("🤖 AI", callback_data=f"cat_{action}_ai"),
+            InlineKeyboardButton("🎮 Gaming", callback_data=f"cat_{action}_gaming"),
+        ],
+        [
+            InlineKeyboardButton("📋 Другие", callback_data=f"cat_{action}_other"),
+            InlineKeyboardButton("🔤 Все A-Z", callback_data=f"cat_{action}_all"),
+        ],
+        [
+            InlineKeyboardButton("🏠 Главное меню", callback_data="main_menu"),
+        ]
+    ])
+
+
+def get_coins_keyboard(coins: list, action: str, category: str):
+    """Генерирует клавиатуру с монетами (по 3 в ряд)."""
+    keyboard = []
+    row = []
+    for coin in coins:
+        emoji = "💰" if action == "price" else "🎯"
+        row.append(InlineKeyboardButton(f"{emoji} {coin}", callback_data=f"{action}_{coin}/USDT"))
+        if len(row) == 3:
+            keyboard.append(row)
+            row = []
+    if row:
+        keyboard.append(row)
     
+    # Навигация
+    keyboard.append([
+        InlineKeyboardButton("◀️ Категории", callback_data=f"menu_{action}"),
+        InlineKeyboardButton("🏠 Меню", callback_data="main_menu"),
+    ])
+    return InlineKeyboardMarkup(keyboard)
+
+
+def get_back_keyboard(extra_buttons=None):
+    """Клавиатура с кнопкой назад."""
+    keyboard = extra_buttons or []
+    keyboard.append([InlineKeyboardButton("🏠 Главное меню", callback_data="main_menu")])
+    return InlineKeyboardMarkup(keyboard)
+
+
+# ======================== КОМАНДЫ ========================
+
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Приветственное сообщение."""
     welcome_text = """
 🚀 *MaxFlash Trading Bot*
 
-Добро пожаловать! Я сканирую топ-50 криптовалют.
+Добро пожаловать! Я анализирую *50 криптовалют* и генерирую торговые сигналы на основе AI.
 
-*Команды:*
-/price `BTC` - Текущая цена
-/signal `ETH` - Торговый сигнал
-/scan - 🔍 *Сканировать все 50 монет*
-/top - Топ монет за 24ч
-/alert `BTC 100000` - Установить алерт
+*Быстрые команды:*
+• `/p btc` - цена BTC
+• `/s eth` - сигнал ETH  
+• `/scan` - скан всех монет
 
-Или используй кнопки ниже 👇
+Выбери действие 👇
 """
     await update.message.reply_text(
         welcome_text, 
-        reply_markup=reply_markup,
+        reply_markup=get_main_menu_keyboard(),
         parse_mode='Markdown'
     )
 
 
-async def get_price(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Получить текущую цену."""
-    # Определяем символ
+async def quick_price(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Быстрая команда /p для цены."""
     if context.args:
         symbol = context.args[0].upper()
         if "/" not in symbol:
             symbol = f"{symbol}/USDT"
+        await send_price(update.message, symbol)
     else:
-        symbol = "BTC/USDT"
-    
-    await _send_price(update.message, symbol)
+        await update.message.reply_text(
+            "💰 *Цена*\n\nИспользование: `/p btc` или `/p sol`",
+            parse_mode='Markdown',
+            reply_markup=get_coin_categories_keyboard("price")
+        )
 
 
-async def _send_price(message, symbol: str, is_callback=False):
-    """Отправляет цену для указанного символа."""
+async def quick_signal(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Быстрая команда /s для сигнала."""
+    if context.args:
+        symbol = context.args[0].upper()
+        if "/" not in symbol:
+            symbol = f"{symbol}/USDT"
+        await send_signal(update.message, symbol)
+    else:
+        await update.message.reply_text(
+            "🎯 *Сигнал*\n\nИспользование: `/s btc` или `/s eth`",
+            parse_mode='Markdown',
+            reply_markup=get_coin_categories_keyboard("signal")
+        )
+
+
+async def scan_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Команда /scan."""
+    await send_scan_results(update.message)
+
+
+# ======================== ОТПРАВКА ДАННЫХ ========================
+
+async def send_price(message, symbol: str, edit=False):
+    """Отправляет цену монеты."""
     try:
-        # Получаем тикер
+        if not edit:
+            status_msg = await message.reply_text("⏳ Загружаю...")
+        else:
+            status_msg = message
+            await status_msg.edit_text("⏳ Загружаю...")
+        
         ticker = data_manager.get_ticker(symbol, exchange_id='binance')
         
-        if ticker is None:
-            await message.reply_text(f"❌ Не удалось получить данные для {symbol}")
-            return
-        
-        price = ticker.get('last', 0)
-        change_24h = ticker.get('percentage', 0) or 0
-        high_24h = ticker.get('high', 0) or 0
-        low_24h = ticker.get('low', 0) or 0
-        volume = ticker.get('quoteVolume', 0) or 0
-        
-        # Определяем эмодзи
-        if change_24h > 0:
-            change_emoji = "🟢"
-            arrow = "▲"
-        elif change_24h < 0:
-            change_emoji = "🔴"
-            arrow = "▼"
-        else:
-            change_emoji = "⚪"
-            arrow = "■"
-        
-        # Форматируем объем
-        if volume >= 1_000_000_000:
-            vol_str = f"{volume/1_000_000_000:.2f}B"
-        elif volume >= 1_000_000:
-            vol_str = f"{volume/1_000_000:.2f}M"
-        else:
-            vol_str = f"{volume:,.0f}"
-        
-        text = f"""
-{change_emoji} *{symbol}*
+        if ticker:
+            price = ticker.get('last', 0)
+            change = ticker.get('percentage', 0) or 0
+            high = ticker.get('high', 0)
+            low = ticker.get('low', 0)
+            volume = ticker.get('quoteVolume', 0) or ticker.get('baseVolume', 0) * price
+            
+            if change > 0:
+                emoji, arrow = "🟢", "▲"
+            elif change < 0:
+                emoji, arrow = "🔴", "▼"
+            else:
+                emoji, arrow = "⚪", "■"
+            
+            coin = symbol.replace('/USDT', '')
+            
+            text = f"""
+{emoji} *{coin}* / USDT
 
-💰 Цена: `${price:,.2f}`
-{arrow} 24ч: `{change_24h:+.2f}%`
-📈 High: `${high_24h:,.2f}`
-📉 Low: `${low_24h:,.2f}`
-📊 Volume: `${vol_str}`
+💰 Цена: `${price:,.4f}`
+📊 24ч: {arrow} `{change:+.2f}%`
+
+📈 High: `${high:,.4f}`
+📉 Low: `${low:,.4f}`
+💎 Volume: `${volume/1e6:,.1f}M`
 
 🕐 {datetime.now().strftime('%H:%M:%S')}
 """
-        
-        keyboard = [
-            [
-                InlineKeyboardButton("🔄 Обновить", callback_data=f"price_{symbol}"),
-                InlineKeyboardButton("🎯 Сигнал", callback_data=f"signal_{symbol}"),
-            ],
-            [
-                InlineKeyboardButton("🏠 Главное меню", callback_data="main_menu"),
+            keyboard = [
+                [
+                    InlineKeyboardButton("🔄 Обновить", callback_data=f"price_{symbol}"),
+                    InlineKeyboardButton("🎯 Сигнал", callback_data=f"signal_{symbol}"),
+                ],
+                [
+                    InlineKeyboardButton("💰 Другая монета", callback_data="menu_price"),
+                    InlineKeyboardButton("🏠 Меню", callback_data="main_menu"),
+                ]
             ]
-        ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        
-        if is_callback:
-            await message.edit_text(text, parse_mode='Markdown', reply_markup=reply_markup)
+            await status_msg.edit_text(text, parse_mode='Markdown', reply_markup=InlineKeyboardMarkup(keyboard))
         else:
-            await message.reply_text(text, parse_mode='Markdown', reply_markup=reply_markup)
-        
+            await status_msg.edit_text(f"❌ Не удалось получить данные для {symbol}")
+            
     except Exception as e:
-        logger.error(f"Ошибка получения цены {symbol}: {e}")
-        await message.reply_text(f"❌ Ошибка: {str(e)}")
-
-
-async def get_signal(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Получить торговый сигнал."""
-    if context.args:
-        symbol = context.args[0].upper()
-        if "/" not in symbol:
-            symbol = f"{symbol}/USDT"
-    else:
-        symbol = "BTC/USDT"
-    
-    await _send_signal(update.message, symbol)
-
-
-async def _send_signal(message, symbol: str, is_callback=False):
-    """Отправляет сигнал для указанного символа (независимый сканер!)."""
-    try:
-        # Отправляем сообщение о генерации
-        if is_callback:
-            status_msg = message  # Уже сообщение для редактирования
-            await status_msg.edit_text(f"⏳ Анализирую {symbol}...")
+        logger.error(f"Ошибка цены {symbol}: {e}")
+        if edit:
+            await message.edit_text(f"❌ Ошибка: {str(e)}")
         else:
-            status_msg = await message.reply_text(f"⏳ Анализирую {symbol}...")
+            await message.reply_text(f"❌ Ошибка: {str(e)}")
+
+
+async def send_signal(message, symbol: str, edit=False):
+    """Отправляет сигнал для монеты."""
+    try:
+        if not edit:
+            status_msg = await message.reply_text("🔍 Анализирую...")
+        else:
+            status_msg = message
+            await status_msg.edit_text("🔍 Анализирую...")
         
-        # Используем независимый сканер
         signal = signal_scanner.scan_single(symbol)
+        coin = symbol.replace('/USDT', '')
         
         if signal:
             if signal.signal_type == "LONG":
@@ -207,13 +266,12 @@ async def _send_signal(message, symbol: str, is_callback=False):
                 emoji = "🔴"
                 direction = "SHORT (Продажа)"
             
-            # Risk/Reward
             rr_ratio = signal.risk_reward
             
             text = f"""
 {emoji} *СИГНАЛ {direction}*
 
-📍 *{symbol}* ({signal.timeframe})
+📍 *{coin}/USDT* ({signal.timeframe})
 
 🎯 Entry: `${signal.entry_price:,.4f}`
 ✅ Take Profit: `${signal.take_profit:,.4f}`
@@ -223,33 +281,29 @@ async def _send_signal(message, symbol: str, is_callback=False):
 ⚖️ Risk/Reward: `1:{rr_ratio:.1f}`
 
 📋 *Индикаторы:*
-✓ {' • '.join(signal.indicators[:4])}
+• {chr(10).join(['✓ ' + ind for ind in signal.indicators[:4]])}
 
-⚠️ _Это не финансовый совет. Торгуйте ответственно._
+⚠️ _Это не финансовый совет_
 """
-            
             keyboard = [
                 [
                     InlineKeyboardButton("🔄 Обновить", callback_data=f"signal_{symbol}"),
-                    InlineKeyboardButton("📊 Цена", callback_data=f"price_{symbol}"),
+                    InlineKeyboardButton("💰 Цена", callback_data=f"price_{symbol}"),
                 ],
                 [
-                    InlineKeyboardButton("🏠 Главное меню", callback_data="main_menu"),
+                    InlineKeyboardButton("🎯 Другая монета", callback_data="menu_signal"),
+                    InlineKeyboardButton("🏠 Меню", callback_data="main_menu"),
                 ]
             ]
-            reply_markup = InlineKeyboardMarkup(keyboard)
-            
-            await status_msg.edit_text(text, parse_mode='Markdown', reply_markup=reply_markup)
         else:
             text = f"""
-⏸️ *Нет сигнала*
+⏸️ *Нет сигнала для {coin}*
 
-📍 {symbol}
-
-В данный момент нет чётких торговых сигналов. 
 Условия не соответствуют критериям входа.
 
-💡 _Попробуйте /scan для поиска сигналов по всем монетам._
+💡 Попробуй:
+• 🔍 Скан всех монет
+• 🎯 Сигнал для другой монеты
 """
             keyboard = [
                 [
@@ -257,59 +311,116 @@ async def _send_signal(message, symbol: str, is_callback=False):
                     InlineKeyboardButton("🔍 Скан всех", callback_data="scan_all"),
                 ],
                 [
-                    InlineKeyboardButton("🏠 Главное меню", callback_data="main_menu"),
+                    InlineKeyboardButton("🎯 Другая монета", callback_data="menu_signal"),
+                    InlineKeyboardButton("🏠 Меню", callback_data="main_menu"),
                 ]
             ]
-            reply_markup = InlineKeyboardMarkup(keyboard)
-            
-            await status_msg.edit_text(text, parse_mode='Markdown', reply_markup=reply_markup)
+        
+        await status_msg.edit_text(text, parse_mode='Markdown', reply_markup=InlineKeyboardMarkup(keyboard))
             
     except Exception as e:
-        logger.error(f"Ошибка генерации сигнала {symbol}: {e}")
-        await message.reply_text(f"❌ Ошибка: {str(e)}")
-
-
-async def get_top(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Топ-5 монет по изменению за 24 часа."""
-    await _send_top(update.message)
-
-
-async def _send_top(message, is_callback=False):
-    """Отправляет топ монет."""
-    try:
-        if not is_callback:
-            status_msg = await message.reply_text("⏳ Загружаю данные...")
+        logger.error(f"Ошибка сигнала {symbol}: {e}")
+        if edit:
+            await message.edit_text(f"❌ Ошибка: {str(e)}")
         else:
-            status_msg = message  # Уже сообщение для редактирования
+            await message.reply_text(f"❌ Ошибка: {str(e)}")
+
+
+async def send_scan_results(message, edit=False):
+    """Сканирует все монеты."""
+    try:
+        if not edit:
+            status_msg = await message.reply_text("🔍 Сканирую 50 монет... ~30 сек")
+        else:
+            status_msg = message
+            await status_msg.edit_text("🔍 Сканирую 50 монет... ~30 сек")
+        
+        signals = signal_scanner.scan_all()
+        
+        if signals:
+            text = f"🔍 *Найдено сигналов: {len(signals)}*\n\n"
+            
+            # Топ-10 сигналов
+            for i, sig in enumerate(signals[:10], 1):
+                emoji = "🟢" if sig.signal_type == "LONG" else "🔴"
+                coin = sig.symbol.replace('/USDT', '')
+                text += f"{i}. {emoji} *{coin}* - {sig.signal_type} ({sig.confidence:.0%})\n"
+            
+            if len(signals) > 10:
+                text += f"\n_...и ещё {len(signals) - 10} сигналов_"
+            
+            text += f"\n\n🕐 {datetime.now().strftime('%H:%M:%S')}"
+            
+            # Кнопки для топ-5 сигналов
+            keyboard = []
+            row = []
+            for sig in signals[:6]:
+                coin = sig.symbol.replace('/USDT', '')
+                emoji = "🟢" if sig.signal_type == "LONG" else "🔴"
+                row.append(InlineKeyboardButton(f"{emoji}{coin}", callback_data=f"signal_{sig.symbol}"))
+                if len(row) == 3:
+                    keyboard.append(row)
+                    row = []
+            if row:
+                keyboard.append(row)
+                
+            keyboard.append([
+                InlineKeyboardButton("🔄 Обновить", callback_data="scan_all"),
+                InlineKeyboardButton("🏠 Меню", callback_data="main_menu"),
+            ])
+        else:
+            text = """
+⏸️ *Сигналов не найдено*
+
+В данный момент нет чётких торговых возможностей.
+Попробуйте позже или проверьте конкретную монету.
+"""
+            keyboard = [
+                [InlineKeyboardButton("🔄 Обновить", callback_data="scan_all")],
+                [InlineKeyboardButton("🏠 Главное меню", callback_data="main_menu")],
+            ]
+        
+        await status_msg.edit_text(text, parse_mode='Markdown', reply_markup=InlineKeyboardMarkup(keyboard))
+        
+    except Exception as e:
+        logger.error(f"Ошибка сканирования: {e}")
+        if edit:
+            await message.edit_text(f"❌ Ошибка: {str(e)}")
+
+
+async def send_top5(message, edit=False):
+    """Топ-5 монет за 24ч."""
+    try:
+        if not edit:
+            status_msg = await message.reply_text("⏳ Загружаю...")
+        else:
+            status_msg = message
+            await status_msg.edit_text("⏳ Загружаю...")
         
         results = []
-        for symbol in POPULAR_PAIRS:
+        for coin in COINS_TOP + COINS_LAYER1[:5]:
+            symbol = f"{coin}/USDT"
             ticker = data_manager.get_ticker(symbol, exchange_id='binance')
             if ticker:
                 results.append({
-                    'symbol': symbol,
+                    'coin': coin,
                     'price': ticker.get('last', 0),
                     'change': ticker.get('percentage', 0) or 0
                 })
         
-        # Сортируем по изменению
         results.sort(key=lambda x: x['change'], reverse=True)
         
         text = "🔝 *Топ монет за 24ч*\n\n"
         
-        for i, item in enumerate(results, 1):
+        for i, item in enumerate(results[:10], 1):
             if item['change'] > 0:
-                emoji = "🟢"
-                arrow = "▲"
+                emoji, arrow = "🟢", "▲"
             elif item['change'] < 0:
-                emoji = "🔴"
-                arrow = "▼"
+                emoji, arrow = "🔴", "▼"
             else:
-                emoji = "⚪"
-                arrow = "■"
+                emoji, arrow = "⚪", "■"
             
-            symbol_short = item['symbol'].replace('/USDT', '')
-            text += f"{i}. {emoji} *{symbol_short}*: `${item['price']:,.2f}` {arrow}`{item['change']:+.2f}%`\n"
+            text += f"{i}. {emoji} *{item['coin']}*: `${item['price']:,.2f}` {arrow}`{item['change']:+.2f}%`\n"
         
         text += f"\n🕐 {datetime.now().strftime('%H:%M:%S')}"
         
@@ -317,156 +428,33 @@ async def _send_top(message, is_callback=False):
             [InlineKeyboardButton("🔄 Обновить", callback_data="top5")],
             [InlineKeyboardButton("🏠 Главное меню", callback_data="main_menu")],
         ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
         
-        await status_msg.edit_text(text, parse_mode='Markdown', reply_markup=reply_markup)
+        await status_msg.edit_text(text, parse_mode='Markdown', reply_markup=InlineKeyboardMarkup(keyboard))
         
     except Exception as e:
-        logger.error(f"Ошибка получения топа: {e}")
-        if not is_callback:
-            await message.reply_text(f"❌ Ошибка: {str(e)}")
-        else:
-            await message.edit_text(f"❌ Ошибка: {str(e)}")
+        logger.error(f"Ошибка топа: {e}")
 
 
-async def set_alert(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Установить ценовой алерт."""
-    if not context.args or len(context.args) < 2:
-        await update.message.reply_text(
-            "📢 *Установка алерта*\n\n"
-            "Использование:\n"
-            "`/alert BTC 100000` - алерт при цене выше $100k\n"
-            "`/alert ETH <3000` - алерт при цене ниже $3k\n",
-            parse_mode='Markdown'
-        )
-        return
-    
-    symbol = context.args[0].upper()
-    if "/" not in symbol:
-        symbol = f"{symbol}/USDT"
-    
-    price_str = context.args[1]
-    
-    try:
-        if price_str.startswith('<'):
-            price = float(price_str[1:])
-            alert_type = "below"
-            direction = "ниже"
-        else:
-            price = float(price_str.replace('>', ''))
-            alert_type = "above"
-            direction = "выше"
-        
-        user_id = update.effective_user.id
-        if user_id not in user_alerts:
-            user_alerts[user_id] = []
-        
-        user_alerts[user_id].append({
-            'symbol': symbol,
-            'price': price,
-            'type': alert_type
-        })
-        
-        await update.message.reply_text(
-            f"✅ Алерт установлен!\n\n"
-            f"📍 {symbol}\n"
-            f"💰 Цена {direction} `${price:,.2f}`",
-            parse_mode='Markdown'
-        )
-        
-    except ValueError:
-        await update.message.reply_text("❌ Неверный формат цены")
-
-
-async def scan_all_coins(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Сканирование всех 50 монет для поиска сигналов."""
-    await _send_scan_results(update.message)
-
-
-async def _send_scan_results(message, is_callback=False):
-    """Сканирует все монеты и отправляет результаты."""
-    try:
-        if is_callback:
-            status_msg = message  # Уже сообщение для редактирования
-        else:
-            status_msg = await message.reply_text("🔍 Сканирую 50 монет... Это займёт ~30 сек.")
-        
-        # Сканируем все монеты
-        signals = signal_scanner.scan_all()
-        
-        if signals:
-            # Топ-10 сигналов
-            top_signals = signals[:10]
-            
-            text = f"🔍 *Найдено {len(signals)} сигналов*\n\n"
-            
-            for i, s in enumerate(top_signals, 1):
-                emoji = "🟢" if s.signal_type == "LONG" else "🔴"
-                symbol_short = s.symbol.replace('/USDT', '')
-                text += f"{i}. {emoji} *{symbol_short}* `${s.entry_price:,.4f}` ({s.confidence:.0%})\n"
-                text += f"   TP: `${s.take_profit:,.4f}` | SL: `${s.stop_loss:,.4f}`\n"
-            
-            if len(signals) > 10:
-                text += f"\n_...и ещё {len(signals) - 10} сигналов_"
-            
-            text += "\n\n💡 Для деталей: /signal `SYMBOL`"
-            
-            keyboard = [
-                [InlineKeyboardButton("🔄 Обновить", callback_data="scan_all")],
-                [InlineKeyboardButton("🏠 Главное меню", callback_data="main_menu")],
-            ]
-            reply_markup = InlineKeyboardMarkup(keyboard)
-            
-            await status_msg.edit_text(text, parse_mode='Markdown', reply_markup=reply_markup)
-        else:
-            keyboard = [
-                [InlineKeyboardButton("🔄 Обновить", callback_data="scan_all")],
-                [InlineKeyboardButton("🏠 Главное меню", callback_data="main_menu")],
-            ]
-            reply_markup = InlineKeyboardMarkup(keyboard)
-            
-            await status_msg.edit_text(
-                "⏸️ *Нет сигналов*\n\n"
-                "В данный момент нет чётких торговых сигналов по топ-50 монетам.\n"
-                "Рынок в состоянии неопределённости.",
-                parse_mode='Markdown',
-                reply_markup=reply_markup
-            )
-            
-    except Exception as e:
-        logger.error(f"Ошибка сканирования: {e}")
-        await message.reply_text(f"❌ Ошибка: {str(e)}")
-
-
-async def get_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def send_status(message, edit=False):
     """Статус системы."""
-    await _send_status(update.message)
-
-
-async def _send_status(message, is_callback=False):
-    """Отправляет статус системы."""
     try:
-        # Проверяем подключение к биржам
-        exchanges_status = []
-        for exchange in ['binance', 'bybit']:
-            try:
-                ticker = data_manager.get_ticker('BTC/USDT', exchange_id=exchange)
-                if ticker:
-                    exchanges_status.append(f"✅ {exchange.upper()}")
-                else:
-                    exchanges_status.append(f"⚠️ {exchange.upper()}")
-            except:
-                exchanges_status.append(f"❌ {exchange.upper()}")
+        if not edit:
+            status_msg = await message.reply_text("⏳ Проверяю...")
+        else:
+            status_msg = message
+        
+        # Проверяем подключения
+        btc_ticker = data_manager.get_ticker("BTC/USDT", exchange_id='binance')
         
         text = f"""
 📈 *Статус MaxFlash*
 
-*Биржи:*
-{chr(10).join(exchanges_status)}
+🟢 Бот: *Онлайн*
+🟢 Binance: *{'Подключен' if btc_ticker else 'Ошибка'}*
+🟢 AI Модель: *Активна*
 
-*Сигналы:* ✅ Активен
-
-*Активные алерты:* {sum(len(v) for v in user_alerts.values())}
+📊 Отслеживается: *50 монет*
+⏱️ Таймфрейм: *15m*
 
 🕐 {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
 """
@@ -475,181 +463,168 @@ async def _send_status(message, is_callback=False):
             [InlineKeyboardButton("🔄 Обновить", callback_data="status")],
             [InlineKeyboardButton("🏠 Главное меню", callback_data="main_menu")],
         ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
         
-        if is_callback:
-            await message.edit_text(text, parse_mode='Markdown', reply_markup=reply_markup)
-        else:
-            await message.reply_text(text, parse_mode='Markdown', reply_markup=reply_markup)
+        await status_msg.edit_text(text, parse_mode='Markdown', reply_markup=InlineKeyboardMarkup(keyboard))
         
     except Exception as e:
         logger.error(f"Ошибка статуса: {e}")
-        if is_callback:
-            await message.edit_text(f"❌ Ошибка: {str(e)}")
-        else:
-            await message.reply_text(f"❌ Ошибка: {str(e)}")
 
+
+# ======================== ОБРАБОТЧИК CALLBACK ========================
 
 async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Обработка нажатий на inline кнопки."""
+    """Обрабатывает нажатия на inline кнопки."""
     query = update.callback_query
     await query.answer()
     
     data = query.data
+    message = query.message
     
-    if data.startswith("price_"):
-        symbol = data.replace("price_", "")
-        await _send_price(query.message, symbol, is_callback=True)
-        
-    elif data.startswith("signal_"):
-        symbol = data.replace("signal_", "")
-        # Используем правильный метод через сканер
-        await _send_signal(query.message, symbol, is_callback=True)
-        
-    elif data == "top5":
-        await query.message.edit_text("⏳ Загружаю...")
-        await _send_top(query.message, is_callback=True)
-        
-    elif data == "status":
-        await query.message.edit_text("⏳ Загружаю статус...")
-        await _send_status(query.message, is_callback=True)
+    logger.info(f"Callback: {data}")
     
-    elif data == "scan_all":
-        await query.message.edit_text("🔍 Сканирую 50 монет... Это займёт ~30 сек.")
-        await _send_scan_results(query.message, is_callback=True)
-    
-    elif data == "main_menu":
-        # Возврат в главное меню
-        keyboard = [
-            [
-                InlineKeyboardButton("📊 BTC", callback_data="price_BTC/USDT"),
-                InlineKeyboardButton("📊 ETH", callback_data="price_ETH/USDT"),
-                InlineKeyboardButton("📊 SOL", callback_data="price_SOL/USDT"),
-            ],
-            [
-                InlineKeyboardButton("🎯 Сигнал BTC", callback_data="signal_BTC/USDT"),
-                InlineKeyboardButton("🎯 Сигнал ETH", callback_data="signal_ETH/USDT"),
-            ],
-            [
-                InlineKeyboardButton("🔍 СКАН ВСЕХ 50", callback_data="scan_all"),
-            ],
-            [
-                InlineKeyboardButton("🔝 Топ-5", callback_data="top5"),
-                InlineKeyboardButton("📈 Статус", callback_data="status"),
-            ],
-        ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        
-        welcome_text = """
+    # Главное меню
+    if data == "main_menu":
+        text = """
 🚀 *MaxFlash Trading Bot*
 
-Добро пожаловать! Я сканирую топ-50 криптовалют.
-
-*Команды:*
-/price `BTC` - Текущая цена
-/signal `ETH` - Торговый сигнал
-/scan - 🔍 *Сканировать все 50 монет*
-/top - Топ монет за 24ч
-/alert `BTC 100000` - Установить алерт
-
-Или используй кнопки ниже 👇
+Выбери действие 👇
 """
-        await query.message.edit_text(
-            welcome_text, 
-            reply_markup=reply_markup,
+        await message.edit_text(text, parse_mode='Markdown', reply_markup=get_main_menu_keyboard())
+    
+    # Меню выбора монеты для цены
+    elif data == "menu_price":
+        text = "💰 *Выбери категорию монет:*"
+        await message.edit_text(text, parse_mode='Markdown', reply_markup=get_coin_categories_keyboard("price"))
+    
+    # Меню выбора монеты для сигнала
+    elif data == "menu_signal":
+        text = "🎯 *Выбери категорию монет:*"
+        await message.edit_text(text, parse_mode='Markdown', reply_markup=get_coin_categories_keyboard("signal"))
+    
+    # Категории монет
+    elif data.startswith("cat_"):
+        parts = data.split("_")
+        action = parts[1]  # price или signal
+        category = parts[2]  # top, l1, defi, etc.
+        
+        coins_map = {
+            "top": COINS_TOP,
+            "l1": COINS_LAYER1,
+            "defi": COINS_DEFI,
+            "meme": COINS_MEME,
+            "ai": COINS_AI,
+            "gaming": COINS_GAMING,
+            "other": COINS_OTHER,
+            "all": sorted(ALL_COINS),
+        }
+        
+        category_names = {
+            "top": "⭐ ТОП-5",
+            "l1": "🔷 Layer-1",
+            "defi": "💎 DeFi",
+            "meme": "🐕 Meme",
+            "ai": "🤖 AI",
+            "gaming": "🎮 Gaming",
+            "other": "📋 Другие",
+            "all": "🔤 Все монеты",
+        }
+        
+        coins = coins_map.get(category, COINS_TOP)
+        action_text = "💰 Цена" if action == "price" else "🎯 Сигнал"
+        text = f"{action_text} - {category_names.get(category, category)}\n\nВыбери монету:"
+        
+        await message.edit_text(text, parse_mode='Markdown', reply_markup=get_coins_keyboard(coins, action, category))
+    
+    # Цена конкретной монеты
+    elif data.startswith("price_"):
+        symbol = data.replace("price_", "")
+        await send_price(message, symbol, edit=True)
+    
+    # Сигнал конкретной монеты
+    elif data.startswith("signal_"):
+        symbol = data.replace("signal_", "")
+        await send_signal(message, symbol, edit=True)
+    
+    # Сканирование всех
+    elif data == "scan_all":
+        await send_scan_results(message, edit=True)
+    
+    # Топ-5
+    elif data == "top5":
+        await send_top5(message, edit=True)
+    
+    # Статус
+    elif data == "status":
+        await send_status(message, edit=True)
+    
+    # Настройки
+    elif data == "settings":
+        text = """
+⚙️ *Настройки*
+
+Пока доступны только базовые команды.
+
+В будущих версиях:
+• Выбор биржи
+• Настройка алертов
+• Персональный портфель
+"""
+        keyboard = [[InlineKeyboardButton("🏠 Главное меню", callback_data="main_menu")]]
+        await message.edit_text(text, parse_mode='Markdown', reply_markup=InlineKeyboardMarkup(keyboard))
+
+
+# ======================== ОБРАБОТЧИК ТЕКСТА ========================
+
+async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обрабатывает текстовые сообщения как запросы монет."""
+    text = update.message.text.upper().strip()
+    
+    # Если это похоже на тикер монеты
+    if len(text) <= 10 and text.isalpha():
+        symbol = f"{text}/USDT"
+        # Проверяем, существует ли такая монета
+        if text in ALL_COINS or text in ["BTC", "ETH"]:
+            await send_price(update.message, symbol)
+        else:
+            await update.message.reply_text(
+                f"❓ Монета *{text}* не найдена\n\nИспользуй /start для списка доступных монет",
+                parse_mode='Markdown'
+            )
+    else:
+        await update.message.reply_text(
+            "❓ Не понял команду\n\nИспользуй /start для меню",
             parse_mode='Markdown'
         )
 
 
-async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Обработка текстовых сообщений (быстрые запросы цены)."""
-    text = update.message.text.upper().strip()
-    
-    # Если это просто название монеты, показываем цену
-    if len(text) <= 10 and text.isalpha():
-        symbol = f"{text}/USDT"
-        await _send_price(update.message, symbol)
-
-
-async def check_alerts(context: ContextTypes.DEFAULT_TYPE):
-    """Периодическая проверка алертов."""
-    for user_id, alerts in list(user_alerts.items()):
-        alerts_to_remove = []
-        
-        for alert in alerts:
-            try:
-                ticker = data_manager.get_ticker(alert['symbol'], exchange_id='binance')
-                if not ticker:
-                    continue
-                
-                price = ticker.get('last', 0)
-                triggered = False
-                
-                if alert['type'] == 'above' and price >= alert['price']:
-                    triggered = True
-                    msg = f"🔔 *АЛЕРТ!*\n\n{alert['symbol']} выше ${alert['price']:,.2f}\nТекущая цена: `${price:,.2f}`"
-                elif alert['type'] == 'below' and price <= alert['price']:
-                    triggered = True
-                    msg = f"🔔 *АЛЕРТ!*\n\n{alert['symbol']} ниже ${alert['price']:,.2f}\nТекущая цена: `${price:,.2f}`"
-                
-                if triggered:
-                    await context.bot.send_message(user_id, msg, parse_mode='Markdown')
-                    alerts_to_remove.append(alert)
-                    
-            except Exception as e:
-                logger.error(f"Ошибка проверки алерта: {e}")
-        
-        # Удаляем сработавшие алерты
-        for alert in alerts_to_remove:
-            alerts.remove(alert)
-
+# ======================== MAIN ========================
 
 def main():
     """Запуск бота."""
-    # Устанавливаем UTF-8 для консоли Windows
-    import sys
-    if sys.platform == 'win32':
-        try:
-            sys.stdout.reconfigure(encoding='utf-8')
-        except:
-            pass
-
-    logger.info("Starting MaxFlash Telegram Bot...")
-
-    # Создаем приложение
+    logger.info("Starting MaxFlash Telegram Bot v2.0...")
+    
     application = Application.builder().token(BOT_TOKEN).build()
-
-    # Добавляем обработчики команд
+    
+    # Команды
     application.add_handler(CommandHandler("start", start))
-    application.add_handler(CommandHandler("price", get_price))
-    application.add_handler(CommandHandler("p", get_price))  # Короткая версия
-    application.add_handler(CommandHandler("signal", get_signal))
-    application.add_handler(CommandHandler("s", get_signal))  # Короткая версия
-    application.add_handler(CommandHandler("top", get_top))
-    application.add_handler(CommandHandler("scan", scan_all_coins))  # Сканирование всех монет
-    application.add_handler(CommandHandler("alert", set_alert))
-    application.add_handler(CommandHandler("status", get_status))
-
-    # Обработчик callback кнопок
+    application.add_handler(CommandHandler("help", start))
+    application.add_handler(CommandHandler("p", quick_price))
+    application.add_handler(CommandHandler("price", quick_price))
+    application.add_handler(CommandHandler("s", quick_signal))
+    application.add_handler(CommandHandler("signal", quick_signal))
+    application.add_handler(CommandHandler("scan", scan_command))
+    
+    # Callback для кнопок
     application.add_handler(CallbackQueryHandler(button_callback))
-
-    # Обработчик текстовых сообщений (для быстрых запросов)
+    
+    # Текстовые сообщения
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
-
-    # Периодическая проверка алертов (каждые 30 секунд) - опционально
-    if application.job_queue:
-        application.job_queue.run_repeating(check_alerts, interval=30, first=10)
-        logger.info("JobQueue enabled - alerts will be checked every 30 seconds")
-    else:
-        logger.warning("JobQueue not available - install with: pip install 'python-telegram-bot[job-queue]'")
-
+    
     logger.info("Bot is running!")
     logger.info("Open Telegram and message the bot")
-
-    # Запускаем бота
+    
     application.run_polling(allowed_updates=Update.ALL_TYPES)
 
 
 if __name__ == "__main__":
     main()
-

@@ -1,41 +1,43 @@
-# MaxFlash Trading System - Environment Variables Template
-# Скопируйте этот файл в .env и заполните вашими данными
+# MaxFlash Configuration
+# Copy this file to .env and fill in your values
 
-# ============================================
-# НАСТРОЙКИ БИРЖИ (ОБЯЗАТЕЛЬНО для сигналов!)
-# ============================================
+# ============== TELEGRAM BOT ==============
+TELEGRAM_BOT_TOKEN=your_telegram_bot_token_here
+TELEGRAM_CHAT_ID=optional_admin_chat_id
 
-# Имя биржи (binance, bybit, okx, kraken и т.д.)
+# ============== DATABASE ==============
+DATABASE_URL=sqlite+aiosqlite:///./maxflash.db
+# For PostgreSQL:
+# DATABASE_URL=postgresql+asyncpg://user:password@localhost:5432/maxflash
+
+# ============== SECURITY ==============
+SECRET_KEY=your_secret_key_here_generate_with_openssl_rand_hex_32
+
+# ============== EXCHANGE API ==============
 EXCHANGE_NAME=binance
+EXCHANGE_API_KEY=optional_for_live_trading
+EXCHANGE_API_SECRET=optional_for_live_trading
+USE_TESTNET=true
 
-# API ключ от биржи
-# Получите на сайте биржи (например, binance.com → API Management → Create API)
-EXCHANGE_API_KEY=
-
-# API секрет от биржи
-EXCHANGE_API_SECRET=
-
-# ============================================
-# НАСТРОЙКИ DASHBOARD
-# ============================================
-
-# Порт для dashboard
+# ============== DASHBOARD ==============
 DASHBOARD_PORT=8050
-
-# Интервал обновления данных (секунды)
 UPDATE_INTERVAL=30
 
-# ============================================
-# ПО УМОЛЧАНИЮ
-# ============================================
+# ============== RISK MANAGEMENT ==============
+RISK_PROFILE=BALANCED
+MAX_POSITION_SIZE_USD=100.0
+MAX_DAILY_LOSS_USD=50.0
+STOP_LOSS_PERCENT=0.02
+TAKE_PROFIT_PERCENT=0.04
 
-# Торговая пара
-DEFAULT_SYMBOL=BTC/USDT
+# ============== ML SETTINGS ==============
+USE_ML_FILTER=true
+SIGNAL_CONFIDENCE_THRESHOLD=0.7
 
-# Таймфрейм
-DEFAULT_TIMEFRAME=15m
+# ============== LLM (Optional) ==============
+USE_LOCAL_LLM=false
+OLLAMA_BASE_URL=http://localhost:11434
+LLM_MODEL_NAME=qwen2.5:7b
 
-# Количество свечей
-DEFAULT_CANDLES=500
-
-
+# ============== REDIS (Optional) ==============
+REDIS_URL=redis://localhost:6379/0

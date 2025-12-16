@@ -36,10 +36,10 @@ CONFIG = {
     'history_path': 'models/retrain_history.json',
     'versions_dir': 'models/versions',
 
-    # Retraining settings
-    'retrain_days': 14,             # Use 14 days for more stable patterns
-    'min_samples': 3000,            # More samples for stability
-    'max_boost_rounds': 150,        # Moderate iterations
+    # Retraining settings (optimized for 50 coins)
+    'retrain_days': 14,             # 14 days - more recent = more relevant
+    'min_samples': 3000,            # Minimum samples required
+    'max_boost_rounds': 100,        # Reduced to prevent overfitting
     
     # PROFIT-BASED THRESHOLDS (not accuracy!)
     'min_profit_factor': 1.1,       # Profit must exceed losses by 10%
@@ -60,10 +60,19 @@ CONFIG = {
     # Ensemble validation windows (hours)
     'validation_windows': [8, 16, 24, 48],
 
-    # Coins for training
-    'coins': ['BTC/USDT', 'ETH/USDT', 'SOL/USDT', 'XRP/USDT', 'BNB/USDT',
-              'ADA/USDT', 'DOGE/USDT', 'AVAX/USDT', 'DOT/USDT', 'MATIC/USDT',
-              'LINK/USDT', 'UNI/USDT', 'ATOM/USDT', 'LTC/USDT', 'NEAR/USDT'],
+    # 50 coins for training (top Binance pairs)
+    'coins': [
+        'BTC/USDT', 'ETH/USDT', 'BNB/USDT', 'SOL/USDT', 'XRP/USDT',
+        'ADA/USDT', 'DOGE/USDT', 'AVAX/USDT', 'DOT/USDT', 'MATIC/USDT',
+        'LINK/USDT', 'UNI/USDT', 'ATOM/USDT', 'LTC/USDT', 'NEAR/USDT',
+        'ALGO/USDT', 'FTM/USDT', 'ICP/USDT', 'APT/USDT', 'ARB/USDT',
+        'OP/USDT', 'INJ/USDT', 'TIA/USDT', 'SEI/USDT', 'SUI/USDT',
+        'IMX/USDT', 'SAND/USDT', 'MANA/USDT', 'AXS/USDT', 'GALA/USDT',
+        'SHIB/USDT', 'PEPE/USDT', 'FLOKI/USDT', 'BONK/USDT', 'WIF/USDT',
+        'FET/USDT', 'RNDR/USDT', 'TAO/USDT', 'ARKM/USDT', 'OCEAN/USDT',
+        'CRO/USDT', 'OKB/USDT', 'MKR/USDT', 'AAVE/USDT', 'SNX/USDT',
+        'FIL/USDT', 'AR/USDT', 'GRT/USDT', 'ENJ/USDT', 'CHZ/USDT',
+    ],
 
     # Telegram alerts
     'telegram_token': os.getenv('TELEGRAM_BOT_TOKEN'),
@@ -554,5 +563,6 @@ def auto_retrain_v2():
 if __name__ == "__main__":
     success = auto_retrain_v2()
     exit(0 if success else 1)
+
 
 

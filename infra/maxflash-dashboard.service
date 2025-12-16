@@ -1,0 +1,33 @@
+[Unit]
+Description=MaxFlash Trading Dashboard
+After=network.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=devyjones
+Group=devyjones
+WorkingDirectory=/home/devyjones/MaxFlash
+EnvironmentFile=/home/devyjones/MaxFlash/.env
+Environment="PYTHONPATH=/home/devyjones/MaxFlash"
+ExecStartPre=/bin/bash -c 'fuser -k 8050/tcp 2>/dev/null || true; sleep 10'
+ExecStart=/home/devyjones/MaxFlash/venv/bin/python web_interface/dashboard_v2.py
+ExecStopPost=/bin/bash -c 'fuser -k 8050/tcp 2>/dev/null || true'
+Restart=always
+RestartSec=15
+KillMode=mixed
+KillSignal=SIGTERM
+TimeoutStopSec=10
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=maxflash-dashboard
+
+# Security hardening
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
+

@@ -1,0 +1,331 @@
+/* MaxFlash Dashboard - Mobile Responsive Styles */
+
+/* Base responsive adjustments */
+@media screen and (max-width: 992px) {
+    /* Header adjustments */
+    .navbar {
+        padding: 0.5rem !important;
+    }
+    
+    .navbar h2 {
+        font-size: 1.2rem !important;
+        letter-spacing: 1px !important;
+    }
+    
+    .navbar .badge {
+        font-size: 0.6rem !important;
+        padding: 0.2rem 0.4rem !important;
+    }
+    
+    /* Stats cards - 2 per row on tablet */
+    .stats-row > div {
+        flex: 0 0 50% !important;
+        max-width: 50% !important;
+        margin-bottom: 0.5rem;
+    }
+    
+    .stats-row .card {
+        margin-bottom: 0.5rem;
+    }
+    
+    .stats-row h3 {
+        font-size: 1.2rem !important;
+    }
+    
+    .stats-row h6 {
+        font-size: 0.7rem !important;
+    }
+    
+    /* Main content - full width columns */
+    .main-content > .row > div {
+        flex: 0 0 100% !important;
+        max-width: 100% !important;
+    }
+    
+    /* Table adjustments */
+    .dash-table-container {
+        overflow-x: auto !important;
+    }
+    
+    .dash-spreadsheet-container {
+        max-height: 350px !important;
+    }
+    
+    .dash-cell {
+        padding: 8px 6px !important;
+        font-size: 0.8rem !important;
+    }
+    
+    .dash-header {
+        font-size: 0.75rem !important;
+    }
+    
+    /* Chart adjustments */
+    .chart-container {
+        height: 350px !important;
+    }
+    
+    /* Signal panel */
+    .signal-panel h3 {
+        font-size: 1.5rem !important;
+    }
+    
+    /* Hot movers panel */
+    .hot-movers {
+        font-size: 0.85rem !important;
+    }
+}
+
+/* Mobile phones */
+@media screen and (max-width: 576px) {
+    /* Header - compact */
+    .navbar {
+        padding: 0.3rem !important;
+    }
+    
+    .navbar h2 {
+        font-size: 1rem !important;
+        letter-spacing: 0px !important;
+    }
+    
+    .navbar .badge {
+        display: none !important;
+    }
+    
+    .live-indicator {
+        font-size: 0.7rem !important;
+    }
+    
+    /* Stats cards - stack vertically, 2 columns */
+    .stats-row {
+        display: flex !important;
+        flex-wrap: wrap !important;
+    }
+    
+    .stats-row > div {
+        flex: 0 0 50% !important;
+        max-width: 50% !important;
+        padding: 0.25rem !important;
+    }
+    
+    .stats-row .card {
+        padding: 0.5rem !important;
+    }
+    
+    .stats-row h3 {
+        font-size: 0.95rem !important;
+        margin-bottom: 0 !important;
+    }
+    
+    .stats-row h6 {
+        font-size: 0.6rem !important;
+        margin-bottom: 0.2rem !important;
+    }
+    
+    /* Table - hide some columns, compact */
+    .dash-spreadsheet-container {
+        max-height: 280px !important;
+    }
+    
+    .dash-cell {
+        padding: 6px 4px !important;
+        font-size: 0.72rem !important;
+        min-width: auto !important;
+    }
+    
+    .dash-header {
+        font-size: 0.65rem !important;
+        padding: 6px 4px !important;
+    }
+    
+    /* Hide volume column on mobile */
+    .dash-cell:nth-child(6),
+    .dash-header:nth-child(6) {
+        display: none !important;
+    }
+    
+    /* Chart - smaller height */
+    .chart-container,
+    .js-plotly-plot {
+        height: 280px !important;
+        min-height: 280px !important;
+    }
+    
+    /* Plotly modebar - hide on mobile */
+    .modebar {
+        display: none !important;
+    }
+    
+    /* Signal and hot movers - side by side on mobile */
+    .signal-hot-row > div {
+        flex: 0 0 100% !important;
+        max-width: 100% !important;
+        margin-bottom: 0.5rem;
+    }
+    
+    .signal-panel {
+        padding: 0.75rem !important;
+    }
+    
+    .signal-panel h3 {
+        font-size: 1.2rem !important;
+    }
+    
+    .signal-panel .progress {
+        height: 20px !important;
+    }
+    
+    .hot-movers {
+        font-size: 0.78rem !important;
+    }
+    
+    .hot-movers > div {
+        padding: 0.3rem 0 !important;
+    }
+    
+    /* Card body padding */
+    .card-body {
+        padding: 0.75rem !important;
+    }
+    
+    /* Card header */
+    .card-header {
+        padding: 0.5rem 0.75rem !important;
+    }
+    
+    .card-header h5 {
+        font-size: 0.9rem !important;
+    }
+    
+    /* Timeframe select */
+    .form-select-sm {
+        font-size: 0.75rem !important;
+        padding: 0.2rem 0.5rem !important;
+    }
+    
+    /* Pagination */
+    .previous-next-container button {
+        padding: 0.3rem 0.5rem !important;
+        font-size: 0.7rem !important;
+    }
+    
+    /* Footer spacing */
+    footer {
+        padding-bottom: 1rem !important;
+    }
+}
+
+/* Extra small devices */
+@media screen and (max-width: 380px) {
+    .navbar h2 {
+        font-size: 0.85rem !important;
+    }
+    
+    .stats-row h3 {
+        font-size: 0.85rem !important;
+    }
+    
+    .stats-row h6 {
+        font-size: 0.55rem !important;
+    }
+    
+    .dash-cell {
+        font-size: 0.65rem !important;
+        padding: 4px 3px !important;
+    }
+    
+    .chart-container,
+    .js-plotly-plot {
+        height: 250px !important;
+    }
+}
+
+/* Touch-friendly adjustments */
+@media (pointer: coarse) {
+    /* Larger touch targets */
+    .dash-cell {
+        min-height: 44px !important;
+    }
+    
+    button, .btn {
+        min-height: 44px !important;
+        min-width: 44px !important;
+    }
+    
+    /* Better tap highlighting */
+    .dash-row:active {
+        background-color: rgba(0, 243, 255, 0.1) !important;
+    }
+}
+
+/* Landscape orientation on mobile */
+@media screen and (max-width: 992px) and (orientation: landscape) {
+    .stats-row > div {
+        flex: 0 0 25% !important;
+        max-width: 25% !important;
+    }
+    
+    .chart-container,
+    .js-plotly-plot {
+        height: 200px !important;
+    }
+    
+    .dash-spreadsheet-container {
+        max-height: 200px !important;
+    }
+}
+
+/* Dark theme enhancements for mobile */
+@media screen and (max-width: 992px) {
+    body {
+        background: linear-gradient(135deg, #0a0a1a 0%, #1a1a2e 100%) !important;
+    }
+    
+    .card {
+        background: rgba(26, 26, 46, 0.95) !important;
+        border-color: rgba(0, 243, 255, 0.2) !important;
+    }
+    
+    /* Neon glow effects - subtle on mobile for performance */
+    .neon-text-blue {
+        text-shadow: 0 0 5px rgba(0, 243, 255, 0.5) !important;
+    }
+    
+    .neon-text-pink {
+        text-shadow: 0 0 5px rgba(255, 0, 255, 0.5) !important;
+    }
+}
+
+/* Sticky header for mobile navigation */
+@media screen and (max-width: 992px) {
+    .navbar {
+        position: sticky !important;
+        top: 0 !important;
+        z-index: 1000 !important;
+        background: rgba(10, 10, 26, 0.98) !important;
+        backdrop-filter: blur(10px) !important;
+    }
+}
+
+/* Smooth scrolling */
+html {
+    scroll-behavior: smooth;
+}
+
+/* Hide scrollbar but keep functionality */
+.dash-spreadsheet-container::-webkit-scrollbar {
+    width: 4px;
+    height: 4px;
+}
+
+.dash-spreadsheet-container::-webkit-scrollbar-track {
+    background: #1a1a2e;
+}
+
+.dash-spreadsheet-container::-webkit-scrollbar-thumb {
+    background: #00f3ff;
+    border-radius: 2px;
+}
+
+
+

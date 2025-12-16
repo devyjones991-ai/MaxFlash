@@ -1,0 +1,17 @@
+[Unit]
+Description=MaxFlash ML Model Auto-Retrain Timer
+Requires=maxflash-retrain.service
+
+[Timer]
+# Run daily at 3:00 AM
+OnCalendar=*-*-* 03:00:00
+# Also run if the system was off at the scheduled time
+Persistent=true
+# Random delay up to 10 minutes to avoid exact timing
+RandomizedDelaySec=600
+
+[Install]
+WantedBy=timers.target
+
+
+

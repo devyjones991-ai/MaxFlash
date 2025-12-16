@@ -1,20 +1,24 @@
-import asyncio
+#!/usr/bin/env python3
+"""Initialize database tables."""
 import sys
-import os
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
-# Add project root to path
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-from app.database import init_db
-from app.models.user import User  # Import models to register them with Base
+import asyncio
+from app.database import engine, Base
+from app.models.user import User, Subscription
 from app.models.signal import Signal
+from app.models.trade import Trade
+from app.models.token import Token
 
 
-async def main():
+async def init_db():
+    """Create all database tables."""
     print("Initializing database...")
-    await init_db()
-    print("Database initialized successfully!")
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    print("Database tables created successfully!")
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    asyncio.run(init_db())
