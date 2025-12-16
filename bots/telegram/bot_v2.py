@@ -26,6 +26,10 @@ from trading.signal_direction import SignalDirection
 from trading.signal_validator import SignalQualityChecker
 from trading.signal_logger import get_signal_logger
 from trading.trading_config import get_coin_tier, get_confidence_threshold, requires_triple_confirmation, ALL_PAIRS
+from trading.mtf_analyzer import MTFAnalyzer
+from trading.patterns import PatternRecognizer, SupportResistance
+
+from ml.confidence_calculator_v2 import ConfidenceCalculatorV2
 
 logger = structlog.get_logger()
 
@@ -90,6 +94,94 @@ def fmt_price(price: float) -> str:
     else:
         return f"${price:.8f}"  # PEPE, BONK, SHIB etc.
 
+
+def validate_trend_contradiction(
+    trend: str,  # "uptrend", "downtrend", "neutral"
+    signal: str,  # "BUY", "SELL"
+    confidence: float,  # 0-100
+    rsi: float
+) -> tuple:
+    """
+    Проверяет противоречие между трендом и сигналом.
+    Возвращает (is_valid, adjusted_confidence)
+    """
+    # ❌ КРАСНЫЙ ФЛАГ: SELL в восходящем тренде
+    if signal == "SELL" and trend == "uptrend":
+        if rsi < 65:  # Нет перекупленности
+            return False, 0  # SKIP сигнал
+        else:
+            confidence *= 0.5  # Снизить уверенность вдвое
+    
+    # ❌ КРАСНЫЙ ФЛАГ: BUY в нисходящем тренде
+    if signal == "BUY" and trend == "downtrend":
+        if rsi > 35:  # Нет перепроданности
+            return False, 0  # SKIP сигнал
+        else:
+            confidence *= 0.5
+    
+    return True, confidence
+
+
+def calculate_position_size(
+    confidence: float,  # 0-100
+    account_balance: float,
+    max_risk_percent: float = 1.0
+) -> float:
+    """
+    Размер позиции зависит от уверенности.
+    Выше уверенность → больше позиция.
+    """
+    if confidence < 40:
+        return 0  # SKIP - слишком низкая уверенность
+    elif confidence < 55:
+        return account_balance * 0.5 * max_risk_percent / 100  # 0.5% депозита
+    elif confidence < 70:
+        return account_balance * 1.5 * max_risk_percent / 100  # 1.5% депозита
+    elif confidence < 80:
+        return account_balance * 2.0 * max_risk_percent / 100  # 2% депозита
+    else:
+        return account_balance * 3.0 * max_risk_percent / 100  # 3% депозита
+
+
+def should_skip_signal(
+    confidence: float,
+    rsi: float,
+    macd_histogram: float,
+    signal_direction: str,
+    has_doji: bool = False,
+    mtf_status: str = "aligned"  # "aligned", "mixed", "conflict"
+) -> tuple:
+    """
+    Отклоняет сигналы, которые выглядят как шум.
+    Возвращает (should_skip, reason)
+    """
+    reasons = []
+    
+    # ❌ SKIP при низкой уверенности
+    if confidence < 55:
+        if 40 <= confidence <= 55:
+            reasons.append(f"Confidence {confidence:.0f}% - speculative zone, skip")
+        elif confidence < 40:
+            reasons.append(f"Confidence {confidence:.0f}% - too low, skip")
+    
+    # ❌ SKIP при нейтральном RSI + неопределенности
+    if 45 <= rsi <= 55:
+        if has_doji:
+            reasons.append(f"Neutral RSI {rsi:.1f} + Doji (indecision), skip")
+        if mtf_status == "mixed":
+            reasons.append(f"Neutral RSI {rsi:.1f} + MTF mixed, skip")
+    
+    # ❌ SKIP при противоречии MACD с направлением
+    if signal_direction == "BUY" and macd_histogram < 0:
+        if confidence < 60:
+            reasons.append(f"BUY but MACD-, contradiction, skip")
+    
+    if reasons:
+        return True, "; ".join(reasons)  # SKIP
+    else:
+        return False, "OK to trade"
+
+
 class MaxFlashBotV2:
     """Enhanced Telegram Bot with user-friendly interface."""
 
@@ -134,6 +226,14 @@ class MaxFlashBotV2:
         # Initialize signal validator and logger
         self.signal_validator = SignalQualityChecker()
         self.signal_logger = get_signal_logger()
+        
+        # Initialize MTF analyzer and pattern recognizer (Phase 2 & 3)
+        self.mtf_analyzer = MTFAnalyzer(self.exchange)
+        self.pattern_recognizer = PatternRecognizer()
+        self.sr_detector = SupportResistance()
+        
+        # Initialize Confidence Calculator V2 (Phase 4)
+        self.confidence_calculator_v2 = ConfidenceCalculatorV2()
         
         self._setup_handlers()
 
@@ -666,30 +766,10 @@ class MaxFlashBotV2:
             df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
             close = df['close']
             
-            # === SIGNAL SCORING (SAME AS DASHBOARD) ===
-            buy_score = 0
-            sell_score = 0
-            reasons = []
+            # === SIGNAL SCORING (CONFIDENCE CALCULATOR V2) ===
             
             # 1. Price change (24h)
             change_24h = ticker.get('percentage', 0) or 0
-            
-            if change_24h <= -5:
-                sell_score += 30
-                reasons.append(f"📉 {change_24h:.1f}%")
-            elif change_24h <= -2:
-                sell_score += 20
-                reasons.append(f"📉 {change_24h:.1f}%")
-            elif change_24h <= -0.5:
-                sell_score += 10
-            elif change_24h >= 5:
-                buy_score += 30
-                reasons.append(f"📈 {change_24h:+.1f}%")
-            elif change_24h >= 2:
-                buy_score += 20
-                reasons.append(f"📈 {change_24h:+.1f}%")
-            elif change_24h >= 0.5:
-                buy_score += 10
             
             # 2. RSI
             if len(df) >= 14:
@@ -699,27 +779,6 @@ class MaxFlashBotV2:
                 rs = gain / (loss + 1e-10)
                 rsi_series = 100 - (100 / (1 + rs))
                 current_rsi = rsi_series.iloc[-1]
-                rsi_prev = rsi_series.iloc[-2] if len(rsi_series) > 1 else current_rsi
-                rsi_trend = current_rsi - rsi_prev
-                
-                if current_rsi < 30:
-                    buy_score += 25
-                    reasons.append(f"RSI {current_rsi:.0f}")
-                elif current_rsi < 40:
-                    buy_score += 15
-                    reasons.append(f"RSI {current_rsi:.0f}↓")
-                elif current_rsi > 70:
-                    sell_score += 25
-                    reasons.append(f"RSI {current_rsi:.0f}")
-                elif current_rsi > 60:
-                    sell_score += 15
-                    reasons.append(f"RSI {current_rsi:.0f}↑")
-                elif current_rsi < 45 and rsi_trend < 0:
-                    sell_score += 10
-                    reasons.append(f"RSI {current_rsi:.0f}⬇")
-                elif current_rsi > 55 and rsi_trend > 0:
-                    buy_score += 10
-                    reasons.append(f"RSI {current_rsi:.0f}⬆")
             else:
                 current_rsi = 50
             
@@ -730,190 +789,128 @@ class MaxFlashBotV2:
             signal_line = macd_line.ewm(span=9, adjust=False).mean()
             
             macd = macd_line.iloc[-1]
-            macd_prev = macd_line.iloc[-2] if len(macd_line) > 1 else macd
             signal = signal_line.iloc[-1]
+            macd_prev = macd_line.iloc[-2] if len(macd_line) > 1 else macd
             signal_prev = signal_line.iloc[-2] if len(signal_line) > 1 else signal
             
-            macd_bullish = macd_prev < signal_prev and macd > signal
-            macd_bearish = macd_prev > signal_prev and macd < signal
-            
-            if macd_bullish:
-                buy_score += 25
-                reasons.append("MACD⬆")
-            elif macd_bearish:
-                sell_score += 25
-                reasons.append("MACD⬇")
-            elif macd > signal:
-                buy_score += 10
-                reasons.append("MACD+")
-            elif macd < signal:
-                sell_score += 10
-                reasons.append("MACD-")
-            
-            # 4. Price vs MA
+            # 4. Price vs MA (Trend)
             price = close.iloc[-1]
             ma20 = close.rolling(20).mean().iloc[-1]
-            ma50 = close.rolling(50).mean().iloc[-1] if len(close) >= 50 else ma20
+            trend = "uptrend" if price > ma20 else "downtrend"
             
-            if price > ma20 > ma50:
-                buy_score += 15
-                reasons.append("Тренд⬆")
-            elif price < ma20 < ma50:
-                sell_score += 15
-                reasons.append("Тренд⬇")
-            elif price < ma20:
-                sell_score += 5
-            elif price > ma20:
-                buy_score += 5
+            # 5. Volume
+            current_volume = ticker.get('quoteVolume', 0)
+            volume_sma20 = df['volume'].rolling(20).mean().iloc[-1] if len(df) >= 20 else current_volume
             
-            # === 5. ML MODEL PREDICTION (HYBRID) ===
-            ml_signal = None
-            ml_conf = 0
-            if self.ml_model:
-                try:
-                    ml_pred = self.ml_model.predict(df)
-                    ml_signal = ml_pred.get('action', 'HOLD')
-                    ml_conf = ml_pred.get('confidence', 0.5)
-                    
-                    # ML score boost based on agreement
-                    score_direction = "BUY" if buy_score > sell_score else ("SELL" if sell_score > buy_score else "HOLD")
-                    
-                    if ml_signal == "BUY" and ml_conf > 0.55:
-                        if score_direction == "BUY":
-                            # Agreement - strong boost
-                            buy_score += 25
-                            reasons.append(f"🤖ML:{ml_conf:.0%}")
-                        else:
-                            # ML alone - moderate boost
-                            buy_score += 15
-                            reasons.append(f"🤖ML BUY")
-                    elif ml_signal == "SELL" and ml_conf > 0.55:
-                        if score_direction == "SELL":
-                            # Agreement - strong boost
-                            sell_score += 25
-                            reasons.append(f"🤖ML:{ml_conf:.0%}")
-                        else:
-                            # ML alone - moderate boost
-                            sell_score += 15
-                            reasons.append(f"🤖ML SELL")
-                except Exception as e:
-                    logger.debug(f"ML prediction failed: {e}")
+            # 6. MTF Status (Phase 2)
+            mtf_status = "aligned"
+            try:
+                mtf_res = self.mtf_analyzer.get_higher_tf_trends(symbol, '15m')
+                # If mixed (0) or conflict (opposite sign to our probable direction)
+                if mtf_res['strength'] == 0:
+                     mtf_status = "mixed"
+                # Note: We don't have final signal yet, but we can check general alignment
+                # For V2, we just pass "mixed" if it's mixed. Conflict is harder to determine without signal.
+                # We'll rely on the V2 calculator to interpret "mixed".
+            except Exception as e:
+                logger.debug(f"MTF check failed: {e}")
+
+            # 7. Pattern Status (Phase 3)
+            has_doji = False
+            try:
+                patterns = self.pattern_recognizer.detect_patterns(df)
+                if patterns.get('doji', False):
+                    has_doji = True
+            except Exception as e:
+                logger.debug(f"Pattern check failed: {e}")
+
+            # 8. Determine Candidate Signal Direction
+            # Logic: RSI extreme or MACD Cross or Trend Follow
+            signal_direction = "WAIT"
             
-            # === CALCULATE CONFIDENCE ===
-            max_score = max(buy_score, sell_score)
-            
-            if max_score >= 60:
-                confidence = 0.85
-            elif max_score >= 45:
-                confidence = 0.75
-            elif max_score >= 30:
-                confidence = 0.60
-            elif max_score >= 20:
-                confidence = 0.50
-            else:
-                confidence = 0.40
-            
-            # === DETERMINE SIGNAL (SAME AS DASHBOARD) ===
-            diff = buy_score - sell_score
-            
-            if diff >= 20:
-                signal_type = "BUY"
-            elif diff <= -20:
-                signal_type = "SELL"
-            elif diff >= 10:
-                signal_type = "BUY"
-                confidence = min(confidence, 0.55)
-            elif diff <= -10:
-                signal_type = "SELL"
-                confidence = min(confidence, 0.55)
-            elif diff > 0:
-                signal_type = "BUY"
-                confidence = min(confidence, 0.45)
-            elif diff < 0:
-                signal_type = "SELL"
-                confidence = min(confidence, 0.45)
-            else:
-                signal_type = "HOLD"
-                confidence = 0.50
-            
-            # === 6. USE SignalDirection FOR CORRECT BUY/SELL ===
-            # Override signal based on RSI rules (RSI < 30 = BUY, RSI > 70 = SELL)
-            macd_histogram = macd - signal
-            price_trend = "uptrend" if price > ma20 else ("downtrend" if price < ma20 else "neutral")
-            
-            direction, confidence_adj, direction_reason = SignalDirection.determine_direction(
+            if current_rsi < 35:
+                signal_direction = "BUY"
+            elif current_rsi > 65:
+                signal_direction = "SELL"
+            elif macd > signal and macd_prev <= signal_prev: # Bullish Cross
+                signal_direction = "BUY"
+            elif macd < signal and macd_prev >= signal_prev: # Bearish Cross
+                signal_direction = "SELL"
+            elif price > ma20 and macd > signal:
+                signal_direction = "BUY"
+            elif price < ma20 and macd < signal:
+                signal_direction = "SELL"
+
+            if signal_direction == "WAIT":
+                # No strong reason to enter
+                return {
+                    'symbol': symbol,
+                    'signal': 'HOLD',
+                    'confidence': 0,
+                    'price': price,
+                    'change_24h': change_24h,
+                    'rsi': current_rsi,
+                    'reasons': ['Neutral indicators'],
+                    'is_speculative': False
+                }
+
+            # 9. Run Confidence Calculator V2
+            analysis = self.confidence_calculator_v2.analyze_signal(
+                signal_direction=signal_direction,
                 rsi=current_rsi,
-                macd_histogram=macd_histogram,
+                macd_histogram=macd - signal,
                 macd_line=macd,
                 signal_line=signal,
-                price_trend=price_trend,
-                confidence=confidence * 100
-            )
-            
-            # Apply direction result
-            if direction != "NEUTRAL":
-                signal_type = direction
-                confidence = min(1.0, confidence + (confidence_adj / 100))
-                if direction_reason not in reasons:
-                    reasons.insert(0, direction_reason.split("=")[0].strip())
-            
-            # === 7. VALIDATE SIGNAL FOR CONTRADICTIONS ===
-            volume_ratio = ticker.get('quoteVolume', 0) / 1_000_000  # Simplified ratio
-            
-            validation = self.signal_validator.validate_and_fix(
-                symbol=symbol,
-                signal_direction=signal_type,
-                confidence=confidence * 100,
-                rsi=current_rsi,
-                macd_histogram=macd_histogram,
+                trend=trend,
                 price_change_24h=change_24h,
-                volume_ratio=min(2.0, volume_ratio / 100) if volume_ratio > 0 else 1.0
+                volume=current_volume,
+                volume_sma20=volume_sma20,
+                has_doji=has_doji,
+                mtf_status=mtf_status
             )
             
-            # Apply validation result
-            if validation['was_inverted']:
-                signal_type = validation['final_signal']
-                reasons.insert(0, "🔄 INVERTED")
-            
-            confidence = validation['final_confidence'] / 100
-            
-            # === 8. GET TIER (for info only, don't override signal) ===
-            tier = get_coin_tier(symbol)
-            # NOTE: We don't apply threshold here - let users see all signals
-            # Threshold filtering was too aggressive and didn't match dashboard
-            
-            # Log the signal
+            # 10. Log Signal
             try:
                 self.signal_logger.log_signal(
                     symbol=symbol,
-                    tier=tier,
-                    signal_direction=signal_type,
-                    confidence=confidence * 100,
+                    tier=get_coin_tier(symbol),
+                    signal_direction=analysis.signal_direction,
+                    confidence=analysis.confidence,
                     rsi=current_rsi,
-                    macd=macd_histogram,
+                    macd=macd - signal,
                     price_change_24h=change_24h,
-                    volume_ratio=volume_ratio,
-                    validation_result=validation
+                    volume_ratio=current_volume / (volume_sma20 + 1),
+                    validation_result={'final_signal': 'EMIT' if analysis.should_emit else 'SKIP', 'issues': analysis.contradictions}
                 )
-            except Exception as log_err:
-                logger.debug(f"Logging failed: {log_err}")
+            except Exception:
+                pass
+
+            # 11. Format Output
+            final_signal = analysis.signal_direction if analysis.should_emit else "HOLD"
+            reasons = analysis.contradictions if analysis.contradictions else ["Strong Signal"]
+            
+            # If rejected, add explanation
+            if not analysis.should_emit:
+                reasons.insert(0, f"Rejected ({analysis.confidence:.0f}%)")
             
             return {
                 'symbol': symbol,
-                'signal': signal_type,
-                'confidence': confidence,
-                'price': ticker['last'],
+                'signal': final_signal,
+                'confidence': analysis.confidence / 100,  # Normalize to 0-1
+                'price': price,
                 'change_24h': change_24h,
                 'rsi': current_rsi,
-                'volume': ticker.get('quoteVolume', 0),
+                'volume': current_volume,
                 'reasons': reasons,
                 'macd_bullish': macd > signal,
-                'ma_trend': 'up' if price > ma20 else 'down',
-                'buy_score': buy_score,
-                'sell_score': sell_score,
-                'tier': tier,
-                'was_inverted': validation['was_inverted'],
-                'issues': validation.get('issues', []),
+                'ma_trend': 'up' if trend == 'uptrend' else 'down',
+                'buy_score': 0, # Legacy
+                'sell_score': 0, # Legacy
+                'tier': get_coin_tier(symbol),
+                'was_inverted': False,
+                'issues': analysis.contradictions,
+                'is_speculative': 40 <= analysis.confidence <= 55 and analysis.should_emit,
+                'position_size_pct': analysis.position_size_percent
             }
             
         except Exception as e:
@@ -958,7 +955,8 @@ class MaxFlashBotV2:
     def _calculate_full_signal(self, symbol: str, price: float, signal: str, signal_score: float,
                                change: float, volume: float, reasons: list,
                                deposit: float = 1000, risk_pct: float = 1.0,
-                               exchange_fee: float = EXCHANGE_FEE) -> dict:
+                               exchange_fee: float = EXCHANGE_FEE,
+                               position_size_pct: float = None) -> dict:
         """
         Calculate full trading signal with entry, TP levels, SL, position size.
         Same logic as dashboard calculate_full_signal.
@@ -993,9 +991,14 @@ class MaxFlashBotV2:
         risk_reward = RISK_CONFIG['tp2_multiplier']  # Based on TP2
         
         # Position sizing
-        risk_amount = deposit * (risk_pct / 100)
-        position_size_usd = risk_amount / (abs(entry - sl) / entry)
-        position_size_usd = min(position_size_usd, deposit * 0.3)  # Max 30% of deposit
+        if position_size_pct is not None and position_size_pct > 0:
+            # V2 Confidence-based sizing
+            position_size_usd = deposit * (position_size_pct / 100)
+        else:
+            # Fallback Risk-based sizing
+            risk_amount = deposit * (risk_pct / 100)
+            position_size_usd = risk_amount / (abs(entry - sl) / entry)
+            position_size_usd = min(position_size_usd, deposit * 0.3)  # Max 30% of deposit
         
         # Quantity
         quantity = position_size_usd / entry
@@ -1088,7 +1091,8 @@ class MaxFlashBotV2:
             reasons=signal.get('reasons', []),
             deposit=1000,  # Default deposit
             risk_pct=1.0,  # Default 1% risk
-            exchange_fee=EXCHANGE_FEE
+            exchange_fee=EXCHANGE_FEE,
+            position_size_pct=signal.get('position_size_pct')
         )
         
         # Build beautiful analysis message
