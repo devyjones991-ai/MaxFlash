@@ -25,25 +25,32 @@ import ccxt
 from collections import Counter
 
 from ml.lightgbm_model import LightGBMSignalGenerator
+from ml.labeling import calculate_atr, evaluate_barrier_outcome
 from utils.logger_config import setup_logging
 
 logger = setup_logging()
 
-# Configuration - PROFIT OPTIMIZED
+# Configuration - PROFIT OPTIMIZED with BARRIER-BASED OUTCOMES
 CONFIG = {
     'model_path': 'models/lightgbm_latest.pkl',
     'backup_path': 'models/lightgbm_backup.pkl',
     'history_path': 'models/retrain_history.json',
     'versions_dir': 'models/versions',
 
-    # Retraining settings (optimized for 50 coins)
-    'retrain_days': 14,             # 14 days - more recent = more relevant
-    'min_samples': 3000,            # Minimum samples required
+    # Retraining settings (optimized for top-20 coins, 1h timeframe)
+    'timeframe': '1h',              # 1h timeframe for quality signals
+    'retrain_days': 30,             # 30 days for 1h data
+    'min_samples': 500,             # Minimum samples required (1h has fewer candles)
     'max_boost_rounds': 100,        # Reduced to prevent overfitting
     
+    # BARRIER-BASED SETTINGS (matching training labels)
+    'tp_atr_mult': 2.5,             # TP = entry + 2.5*ATR
+    'sl_atr_mult': 1.5,             # SL = entry - 1.5*ATR
+    'horizon_bars': 4,              # 4 bars (4 hours) for barrier evaluation
+    
     # PROFIT-BASED THRESHOLDS (not accuracy!)
-    'min_profit_factor': 1.1,       # Profit must exceed losses by 10%
-    'min_win_rate': 0.45,           # At least 45% winning trades
+    'min_profit_factor': 1.2,       # Profit must exceed losses by 20%
+    'min_win_rate': 0.50,           # At least 50% winning trades (barrier-based)
     'min_accuracy': 0.45,           # Lower accuracy threshold (profit matters more)
     'max_accuracy_drop': 0.12,      # Allow larger accuracy swings if profit is good
     
@@ -58,26 +65,28 @@ CONFIG = {
     'volatility_adjustment': 0.8,       # Reduce thresholds in high vol
     
     # Ensemble validation windows (hours)
-    'validation_windows': [8, 16, 24, 48],
+    'validation_windows': [12, 24, 48, 72],
 
-    # 50 coins for training (top Binance pairs)
+    # Top-20 coins for training (uses universe selector if available)
+    'n_coins': 20,
     'coins': [
         'BTC/USDT', 'ETH/USDT', 'BNB/USDT', 'SOL/USDT', 'XRP/USDT',
-        'ADA/USDT', 'DOGE/USDT', 'AVAX/USDT', 'DOT/USDT', 'MATIC/USDT',
-        'LINK/USDT', 'UNI/USDT', 'ATOM/USDT', 'LTC/USDT', 'NEAR/USDT',
-        'ALGO/USDT', 'FTM/USDT', 'ICP/USDT', 'APT/USDT', 'ARB/USDT',
-        'OP/USDT', 'INJ/USDT', 'TIA/USDT', 'SEI/USDT', 'SUI/USDT',
-        'IMX/USDT', 'SAND/USDT', 'MANA/USDT', 'AXS/USDT', 'GALA/USDT',
-        'SHIB/USDT', 'PEPE/USDT', 'FLOKI/USDT', 'BONK/USDT', 'WIF/USDT',
-        'FET/USDT', 'RNDR/USDT', 'TAO/USDT', 'ARKM/USDT', 'OCEAN/USDT',
-        'CRO/USDT', 'OKB/USDT', 'MKR/USDT', 'AAVE/USDT', 'SNX/USDT',
-        'FIL/USDT', 'AR/USDT', 'GRT/USDT', 'ENJ/USDT', 'CHZ/USDT',
+        'ADA/USDT', 'DOGE/USDT', 'AVAX/USDT', 'DOT/USDT', 'LINK/USDT',
+        'ATOM/USDT', 'UNI/USDT', 'LTC/USDT', 'NEAR/USDT', 'ARB/USDT',
+        'OP/USDT', 'APT/USDT', 'SUI/USDT', 'INJ/USDT', 'FET/USDT',
     ],
 
     # Telegram alerts
     'telegram_token': os.getenv('TELEGRAM_BOT_TOKEN'),
     'telegram_chat_id': os.getenv('TELEGRAM_CHAT_ID'),
 }
+
+# Try to use dynamic universe selector
+try:
+    from utils.universe_selector import get_top_n_pairs
+    HAS_UNIVERSE_SELECTOR = True
+except ImportError:
+    HAS_UNIVERSE_SELECTOR = False
 
 
 def send_telegram_alert(message: str, is_error: bool = False):
@@ -176,37 +185,93 @@ def get_adaptive_thresholds(volatility: float) -> Dict:
     }
 
 
-def simulate_trading(model: LightGBMSignalGenerator, data: pd.DataFrame) -> Dict:
+def simulate_trading(
+    model: LightGBMSignalGenerator, 
+    data: pd.DataFrame,
+    tp_atr_mult: float = 2.5,
+    sl_atr_mult: float = 1.5,
+    horizon_bars: int = 4,
+) -> Dict:
     """
-    Simulate trading based on model predictions.
-    Returns profit metrics instead of just accuracy.
+    Simulate trading based on model predictions with BARRIER-BASED outcomes.
+    
+    Uses TP/SL barriers (ATR-based) to evaluate trades - matching the training labels.
+    A trade is a WIN if TP is hit before SL within the horizon.
+    
+    Args:
+        model: Trained LightGBM model
+        data: OHLCV DataFrame
+        tp_atr_mult: Take Profit ATR multiplier
+        sl_atr_mult: Stop Loss ATR multiplier
+        horizon_bars: Number of bars to check for barrier hits
+        
+    Returns:
+        Profit metrics dictionary
     """
     try:
         predictions = model.predict_batch(data)
         
-        # Calculate actual returns
-        returns = data['close'].pct_change().shift(-1)  # Next period return
+        # Calculate ATR for barrier levels
+        atr = calculate_atr(data, period=14)
         
-        # Simulate trades
+        close = data['close'].values
+        high = data['high'].values
+        low = data['low'].values
+        
+        # Simulate trades with barrier evaluation
         trades = []
-        min_len = min(len(predictions), len(returns))
+        i = 0
         
-        for i in range(min_len - 1):
+        while i < len(predictions) - horizon_bars:
             pred = predictions[i]
-            ret = returns.iloc[i]
             
-            if np.isnan(ret):
+            # Only trade on BUY (2) or SELL (0) signals
+            if pred == 1:  # HOLD
+                i += 1
                 continue
             
-            # BUY signal (pred=2)
-            if pred == 2:
-                pnl = ret * 100  # Percentage return
-                trades.append({'signal': 'BUY', 'pnl': pnl, 'return': ret})
+            entry_price = close[i]
+            current_atr = atr.iloc[i]
             
-            # SELL signal (pred=0)
-            elif pred == 0:
-                pnl = -ret * 100  # Inverse for short
-                trades.append({'signal': 'SELL', 'pnl': pnl, 'return': -ret})
+            if np.isnan(current_atr) or current_atr <= 0:
+                i += 1
+                continue
+            
+            is_long = (pred == 2)  # BUY
+            
+            # Calculate barriers
+            if is_long:
+                tp_price = entry_price + (current_atr * tp_atr_mult)
+                sl_price = entry_price - (current_atr * sl_atr_mult)
+            else:  # SHORT
+                tp_price = entry_price - (current_atr * tp_atr_mult)
+                sl_price = entry_price + (current_atr * sl_atr_mult)
+            
+            # Check future bars for barrier hits
+            future_df = data.iloc[i+1:i+1+horizon_bars]
+            outcome = evaluate_barrier_outcome(
+                entry_price=entry_price,
+                tp_price=tp_price,
+                sl_price=sl_price,
+                future_ohlcv=future_df,
+                is_long=is_long,
+            )
+            
+            # Calculate PnL based on outcome
+            pnl_pct = outcome['pnl_percent']
+            outcome_type = outcome['outcome']
+            
+            trades.append({
+                'signal': 'BUY' if is_long else 'SELL',
+                'pnl': pnl_pct,
+                'outcome': outcome_type,
+                'entry': entry_price,
+                'tp': tp_price,
+                'sl': sl_price,
+            })
+            
+            # Skip to after horizon (no overlapping trades)
+            i += horizon_bars + 1
         
         if not trades:
             return {'profit_factor': 0, 'win_rate': 0, 'total_pnl': 0, 'trades': 0}
@@ -214,8 +279,8 @@ def simulate_trading(model: LightGBMSignalGenerator, data: pd.DataFrame) -> Dict
         trades_df = pd.DataFrame(trades)
         
         # Calculate metrics
-        winning = trades_df[trades_df['pnl'] > 0]
-        losing = trades_df[trades_df['pnl'] < 0]
+        winning = trades_df[trades_df['outcome'] == 'win']
+        losing = trades_df[trades_df['outcome'] == 'lose']
         
         gross_profit = winning['pnl'].sum() if len(winning) > 0 else 0
         gross_loss = abs(losing['pnl'].sum()) if len(losing) > 0 else 0
@@ -224,23 +289,21 @@ def simulate_trading(model: LightGBMSignalGenerator, data: pd.DataFrame) -> Dict
         win_rate = len(winning) / len(trades_df) if len(trades_df) > 0 else 0
         total_pnl = trades_df['pnl'].sum()
         
-        # Calculate accuracy too (for comparison)
-        labels = np.where(returns > 0.005, 2, np.where(returns < -0.005, 0, 1))
-        accuracy = np.mean(predictions[:min_len] == labels[:min_len])
-        
         return {
             'profit_factor': profit_factor,
             'win_rate': win_rate,
             'total_pnl': total_pnl,
             'trades': len(trades_df),
-            'accuracy': accuracy,
+            'wins': len(winning),
+            'losses': len(losing),
+            'timeouts': len(trades_df[trades_df['outcome'] == 'no_hit']),
             'avg_win': winning['pnl'].mean() if len(winning) > 0 else 0,
             'avg_loss': losing['pnl'].mean() if len(losing) > 0 else 0,
         }
         
     except Exception as e:
         logger.error(f"Trading simulation failed: {e}")
-        return {'profit_factor': 0, 'win_rate': 0, 'total_pnl': 0, 'trades': 0, 'accuracy': 0}
+        return {'profit_factor': 0, 'win_rate': 0, 'total_pnl': 0, 'trades': 0}
 
 
 def cross_validate_profit(model: LightGBMSignalGenerator, data: pd.DataFrame, n_folds: int = 5) -> Dict:
@@ -563,6 +626,8 @@ def auto_retrain_v2():
 if __name__ == "__main__":
     success = auto_retrain_v2()
     exit(0 if success else 1)
+
+
 
 
 

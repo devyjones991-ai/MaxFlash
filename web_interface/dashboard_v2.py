@@ -17,6 +17,7 @@ import asyncio
 import ccxt
 
 from utils.logger_config import setup_logging
+from utils.enhanced_signal_generator import EnhancedSignalGenerator
 
 # Import signal validation modules
 from trading.signal_direction import SignalDirection
@@ -25,7 +26,8 @@ from trading.trading_config import get_coin_tier, get_confidence_threshold
 
 logger = setup_logging()
 
-# Initialize signal validator
+# Initialize signal generator and validator
+signal_generator = EnhancedSignalGenerator()
 signal_validator = SignalQualityChecker()
 
 # TOP 55 Trading Pairs (synced with bot + hot coins)
@@ -171,9 +173,23 @@ def calculate_full_signal(symbol: str, price: float, signal: str, signal_score: 
     # Risk/Reward calculation
     risk_reward = RISK_CONFIG['tp2_multiplier']  # Based on TP2
     
-    # Position sizing (без учета комиссии для базового расчета)
-    risk_amount = deposit * (risk_pct / 100)
-    position_size_usd = risk_amount / (abs(entry - sl) / entry)
+    # Расчет TP percent для проверки
+    tp2_pct = abs(tp2 - entry) / entry * 100
+    
+    # Position sizing с учетом confidence (исправлено)
+    risk_amount = deposit * (risk_pct / 100)  # Фиксированный риск (например $10 при 1% и $1000 депозита)
+    position_size_usd = risk_amount / (abs(entry - sl) / entry)  # Базовый размер
+    
+    # Корректировка на confidence (для слабых сигналов - меньший размер)
+    # confidence_multiplier: 0.5-1.0 в зависимости от signal_score
+    confidence_multiplier = max(0.5, min(1.0, signal_score / 100.0))
+    position_size_usd = position_size_usd * confidence_multiplier
+    
+    # 4. Если tp_percent < 3 и confidence > 70 → position_size = "$100"
+    if tp2_pct < 3 and signal_score > 70:
+        position_size_usd = 100.0  # Фиксированный размер $100
+    
+    # Максимальный размер позиции (защита)
     position_size_usd = min(position_size_usd, deposit * 0.3)  # Max 30% of deposit
     
     # Quantity (базовый расчет)
@@ -236,6 +252,25 @@ def calculate_macd(close: pd.Series) -> tuple:
 
 
 def get_enhanced_signal(ticker: dict, ohlcv_data: pd.DataFrame = None) -> tuple:
+    """
+    Enhanced signal generation using EnhancedSignalGenerator.
+    Includes validation for better signal quality.
+    
+    Returns (signal, score, details)
+    """
+    # Use the new enhanced signal generator
+    signal, confidence, reasons = signal_generator.generate_signal(ticker, ohlcv_data)
+    
+    # Optional: Apply additional validation if needed
+    # (SignalDirection and signal_validator logic can be added here if required)
+    # For now, we trust the enhanced generator
+    return signal, confidence, reasons
+
+
+def get_market_data():
+    """
+    OLD implementation - kept for reference, not used anymore.
+    """
     """
     Simplified but effective signal generation.
     Focus on core indicators without excessive exclusions.

@@ -30,8 +30,20 @@ from trading.mtf_analyzer import MTFAnalyzer
 from trading.patterns import PatternRecognizer, SupportResistance
 
 from ml.confidence_calculator_v2 import ConfidenceCalculatorV2
+from utils.enhanced_signal_generator import EnhancedSignalGenerator
+from utils.signal_integrator import SignalIntegrator
+from utils.universe_selector import get_universe_selector, get_top_20_pairs
+from trading.outcome_tracker import get_outcome_tracker
 
 logger = structlog.get_logger()
+
+# Bot configuration
+BOT_CONFIG = {
+    'timeframe': '1h',              # 1h timeframe for reduced noise
+    'universe_size': 20,            # Top-20 pairs for quality signals
+    'min_confidence': 0.55,         # Minimum confidence to emit signal
+    'use_ml_integration': True,     # Use ML + rules consensus
+}
 
 # TOP 55 Trading Pairs (synced with dashboard + hot coins)
 TOP_PAIRS = [
@@ -203,25 +215,55 @@ class MaxFlashBotV2:
         # Store top signals for quick access
         self.cached_top_signals = []
         
+        # Initialize enhanced signal generator (unified with dashboard)
+        self.signal_generator = EnhancedSignalGenerator()
+        
         # Initialize ML model
         self.ml_model = None
         try:
             from ml.lightgbm_model import LightGBMSignalGenerator
             import os
-            model_path = os.path.join(os.path.dirname(__file__), '../../models/lightgbm_quick.pkl')
-            if os.path.exists(model_path):
-                self.ml_model = LightGBMSignalGenerator(model_path=model_path)
-                logger.info("ML model loaded successfully")
-            else:
-                # Try absolute path
-                model_path = 'models/lightgbm_quick.pkl'
+            # Try multiple model paths
+            model_paths = [
+                os.path.join(os.path.dirname(__file__), '../../models/lightgbm_quick.pkl'),
+                'models/lightgbm_quick.pkl',
+                'models/lightgbm_latest.pkl',
+            ]
+            for model_path in model_paths:
                 if os.path.exists(model_path):
                     self.ml_model = LightGBMSignalGenerator(model_path=model_path)
-                    logger.info("ML model loaded successfully")
-                else:
-                    logger.warning("ML model not found, running without ML")
+                    logger.info(f"ML model loaded from {model_path}")
+                    break
+            if not self.ml_model:
+                logger.warning("ML model not found, running without ML")
         except Exception as e:
             logger.warning(f"Failed to load ML model: {e}")
+        
+        # Initialize Signal Integrator (ML + Rules consensus for 1h signals)
+        self.signal_integrator = SignalIntegrator(
+            ml_model=self.ml_model,
+            ml_weight=0.40,
+            enhanced_weight=0.60,
+            timeframe=BOT_CONFIG['timeframe'],
+            use_validator=True,
+        )
+        logger.info(f"SignalIntegrator initialized (timeframe={BOT_CONFIG['timeframe']})")
+        
+        # Initialize universe selector for top-20 pairs
+        try:
+            self.universe_selector = get_universe_selector()
+            logger.info("Universe selector initialized")
+        except Exception as e:
+            self.universe_selector = None
+            logger.warning(f"Universe selector not available: {e}")
+        
+        # Initialize outcome tracker for signal quality monitoring
+        try:
+            self.outcome_tracker = get_outcome_tracker()
+            logger.info("Outcome tracker initialized")
+        except Exception as e:
+            self.outcome_tracker = None
+            logger.warning(f"Outcome tracker not available: {e}")
         
         # Initialize signal validator and logger
         self.signal_validator = SignalQualityChecker()
@@ -325,11 +367,18 @@ class MaxFlashBotV2:
         await update.message.reply_text(help_text, parse_mode="Markdown")
 
     async def cmd_top_signals(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Show top signals across TOP 50 pairs."""
-        msg = await update.message.reply_text("🔍 *Сканирую ТОП 50 монет...*\n⏳ Это займёт ~30 сек", parse_mode="Markdown")
+        """Show top signals across top-20 pairs (by volume, multi-exchange)."""
+        timeframe = BOT_CONFIG['timeframe']
+        n_pairs = BOT_CONFIG['universe_size']
         
-        # Analyze all 50 pairs
-        signals = await self._analyze_multiple_pairs(TOP_PAIRS)
+        msg = await update.message.reply_text(
+            f"🔍 *Сканирую ТОП {n_pairs} монет ({timeframe})...*\n"
+            f"⏳ ML + Rules консенсус...",
+            parse_mode="Markdown"
+        )
+        
+        # Analyze top-N pairs (dynamic selection by volume)
+        signals = await self._analyze_multiple_pairs(n=n_pairs)
         
         # Cache signals for quick access
         self.cached_top_signals = signals
@@ -342,7 +391,7 @@ class MaxFlashBotV2:
         buy_signals.sort(key=lambda x: x.get('confidence', 0), reverse=True)
         sell_signals.sort(key=lambda x: x.get('confidence', 0), reverse=True)
         
-        text = "🏆 *ТОП СИГНАЛЫ ИЗ 50 МОНЕТ*\n\n"
+        text = f"🏆 *ТОП СИГНАЛЫ ({timeframe} | ML+Rules)*\n\n"
         
         if buy_signals:
             text += "🟢 *ЛУЧШИЕ ДЛЯ ПОКУПКИ:*\n"
@@ -350,7 +399,8 @@ class MaxFlashBotV2:
                 sym = sig['symbol'].replace('/USDT', '')
                 conf = sig['confidence'] * 100
                 change = sig.get('change_24h', 0)
-                text += f"{i}. *{sym}* - {conf:.0f}% ({change:+.1f}%)\n"
+                consensus = "✓" if sig.get('consensus') else ""
+                text += f"{i}. *{sym}* - {conf:.0f}%{consensus} ({change:+.1f}%)\n"
             text += "\n"
         
         if sell_signals:
@@ -733,8 +783,31 @@ class MaxFlashBotV2:
         """Get emoji for signal type."""
         return {"BUY": "🟢", "SELL": "🔴", "HOLD": "⚪"}.get(signal, "⚪")
 
-    async def _analyze_multiple_pairs(self, pairs: List[str]) -> List[Dict]:
-        """Analyze multiple pairs and return signals."""
+    def _get_trading_pairs(self, n: int = 20) -> List[str]:
+        """
+        Get trading pairs to analyze.
+        Uses dynamic top-N by volume if universe selector is available.
+        """
+        if self.universe_selector:
+            try:
+                pairs = self.universe_selector.get_pair_symbols(n=n)
+                if pairs:
+                    logger.info(f"Using {len(pairs)} pairs from universe selector")
+                    return pairs
+            except Exception as e:
+                logger.warning(f"Universe selector failed: {e}")
+        
+        # Fallback to static TOP_PAIRS
+        return TOP_PAIRS[:n]
+    
+    async def _analyze_multiple_pairs(self, pairs: List[str] = None, n: int = 20) -> List[Dict]:
+        """
+        Analyze multiple pairs and return signals.
+        Uses dynamic top-N pairs if no specific pairs provided.
+        """
+        if pairs is None:
+            pairs = self._get_trading_pairs(n=n)
+        
         results = []
         
         for pair in pairs:
@@ -748,7 +821,84 @@ class MaxFlashBotV2:
         return results
 
     async def _get_signal_for_pair(self, symbol: str) -> Optional[Dict]:
-        """Get signal for a single pair. SYNCED WITH DASHBOARD LOGIC."""
+        """
+        Get signal for a single pair using SignalIntegrator (ML + Rules consensus).
+        Uses 1h timeframe and multi-exchange data for quality signals.
+        """
+        try:
+            if not symbol.endswith('/USDT'):
+                symbol = f"{symbol}/USDT"
+            
+            # Determine best exchange for this symbol
+            exchange_id = 'binance'  # Default
+            if self.universe_selector:
+                exchange_id = self.universe_selector.get_best_exchange_for_symbol(symbol)
+            
+            # Get exchange instance
+            exchange = self.exchanges.get(exchange_id, self.exchange)
+            
+            # Get ticker data
+            ticker = exchange.fetch_ticker(symbol)
+            
+            # Get OHLCV for analysis (1h timeframe for quality signals)
+            timeframe = BOT_CONFIG['timeframe']
+            ohlcv = exchange.fetch_ohlcv(symbol, timeframe, limit=100)
+            
+            if not ohlcv:
+                return None
+            
+            import pandas as pd
+            df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
+            
+            # Use SignalIntegrator (ML + Rules consensus)
+            integrated = self.signal_integrator.integrate_signals(
+                symbol=symbol,
+                ticker=ticker,
+                ohlcv_df=df,
+                timeframe=timeframe,
+                exchange_id=exchange_id,
+            )
+            
+            signal = integrated.get('signal', 'HOLD')
+            confidence = integrated.get('confidence', 0.5)
+            reasons = integrated.get('reasons', [])
+            
+            # Calculate RSI for display
+            rsi = self.signal_generator.calculate_rsi(df['close'])
+            
+            # Calculate MACD for additional info
+            macd_line, signal_line, macd_hist = self.signal_generator.calculate_macd(df['close'])
+            macd_bullish = macd_line > signal_line
+            
+            # Price trend
+            price = df['close'].iloc[-1]
+            ma20 = df['close'].rolling(20).mean().iloc[-1]
+            ma_trend = 'up' if price > ma20 else 'down'
+            
+            return {
+                'symbol': symbol,
+                'signal': signal,
+                'confidence': confidence,  # Already 0-1 from integrator
+                'price': ticker['last'],
+                'change_24h': ticker.get('percentage', 0) or 0,
+                'rsi': rsi,
+                'volume': ticker.get('quoteVolume', 0),
+                'reasons': reasons,
+                'macd_bullish': macd_bullish,
+                'ma_trend': ma_trend,
+                'exchange': exchange_id,
+                'timeframe': timeframe,
+                'method': integrated.get('method', 'unknown'),
+                'consensus': integrated.get('consensus', False),
+                'ml_available': integrated.get('ml_available', False),
+            }
+            
+        except Exception as e:
+            logger.error(f"Error getting signal for {symbol}: {e}")
+            return None
+
+    async def _get_signal_for_pair_old(self, symbol: str) -> Optional[Dict]:
+        """OLD implementation - kept for reference."""
         try:
             if not symbol.endswith('/USDT'):
                 symbol = f"{symbol}/USDT"
@@ -990,14 +1140,31 @@ class MaxFlashBotV2:
         # Risk/Reward calculation
         risk_reward = RISK_CONFIG['tp2_multiplier']  # Based on TP2
         
-        # Position sizing
+        # Position sizing с учетом confidence (исправлено)
+        # Расчет TP percent для проверки (нужен для всех случаев)
+        tp2_pct = abs(tp2 - entry) / entry * 100
+        
         if position_size_pct is not None and position_size_pct > 0:
             # V2 Confidence-based sizing
             position_size_usd = deposit * (position_size_pct / 100)
+            
+            # 4. Если tp_percent < 3 и confidence > 70 → position_size = "$100"
+            if tp2_pct < 3 and signal_score > 70:
+                position_size_usd = 100.0  # Фиксированный размер $100
         else:
-            # Fallback Risk-based sizing
-            risk_amount = deposit * (risk_pct / 100)
-            position_size_usd = risk_amount / (abs(entry - sl) / entry)
+            # Fallback Risk-based sizing с учетом confidence
+            risk_amount = deposit * (risk_pct / 100)  # Фиксированный риск
+            position_size_usd = risk_amount / (abs(entry - sl) / entry)  # Базовый размер
+            
+            # Корректировка на confidence (для слабых сигналов - меньший размер)
+            confidence_multiplier = max(0.5, min(1.0, signal_score / 100.0))
+            position_size_usd = position_size_usd * confidence_multiplier
+            
+            # 4. Если tp_percent < 3 и confidence > 70 → position_size = "$100"
+            if tp2_pct < 3 and signal_score > 70:
+                position_size_usd = 100.0  # Фиксированный размер $100
+            
+            # Максимальный размер позиции (защита)
             position_size_usd = min(position_size_usd, deposit * 0.3)  # Max 30% of deposit
         
         # Quantity
@@ -1037,6 +1204,29 @@ class MaxFlashBotV2:
             'commission_exit': commission_exit,
             'total_commission': total_commission,
         }
+    
+    def _track_signal(self, full_signal: Dict, exchange: str = 'binance', method: str = 'unknown'):
+        """Track signal for outcome monitoring."""
+        if not self.outcome_tracker or not full_signal:
+            return None
+        
+        try:
+            signal_id = self.outcome_tracker.add_signal(
+                symbol=full_signal['symbol'],
+                signal_type=full_signal['signal'],
+                entry_price=full_signal['entry'],
+                tp_price=full_signal['tp2'],  # Use TP2 as main target
+                sl_price=full_signal['sl'],
+                confidence=full_signal['confidence'] / 100,  # Convert to 0-1
+                exchange=exchange,
+                timeframe=BOT_CONFIG['timeframe'],
+                method=method,
+            )
+            logger.info(f"Signal tracked: {signal_id}")
+            return signal_id
+        except Exception as e:
+            logger.warning(f"Failed to track signal: {e}")
+            return None
 
     async def _get_available_exchanges(self, symbol: str) -> List[str]:
         """Check which exchanges have this trading pair available."""
@@ -1094,6 +1284,14 @@ class MaxFlashBotV2:
             exchange_fee=EXCHANGE_FEE,
             position_size_pct=signal.get('position_size_pct')
         )
+        
+        # Track signal for outcome monitoring (only actionable signals)
+        if full_signal and signal['signal'] != 'HOLD':
+            self._track_signal(
+                full_signal=full_signal,
+                exchange=signal.get('exchange', 'binance'),
+                method=signal.get('method', 'unknown'),
+            )
         
         # Build beautiful analysis message
         emoji = self._get_signal_emoji(signal['signal'])
