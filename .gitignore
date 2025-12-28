@@ -67,3 +67,6 @@ htmlcov/
 # OS
 .DS_Store
 Thumbs.db
+
+# VSCode History (may contain secrets)
+.history/
