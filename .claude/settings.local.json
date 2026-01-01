@@ -28,7 +28,12 @@
       "Bash(timeout 300 py:*)",
       "Bash(timeout 420 py:*)",
       "Bash(timeout 60 py:*)",
-      "Bash(timeout 600 py:*)"
+      "Bash(timeout 600 py:*)",
+      "Bash(ssh:*)",
+      "Bash(tee:*)",
+      "Bash(scp:*)",
+      "Bash(sshpass:*)",
+      "Bash(cat:*)"
     ],
     "deny": [],
     "ask": []

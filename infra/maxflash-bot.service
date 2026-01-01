@@ -1,0 +1,28 @@
+[Unit]
+Description=MaxFlash Telegram Bot
+After=network.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=devyjones
+Group=devyjones
+WorkingDirectory=/home/devyjones/MaxFlash
+EnvironmentFile=/home/devyjones/MaxFlash/.env
+Environment="PYTHONPATH=/home/devyjones/MaxFlash"
+ExecStart=/home/devyjones/MaxFlash/venv/bin/python run_bot_v2.py
+Restart=always
+RestartSec=5
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=maxflash-bot
+
+# Security hardening
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
+

@@ -47,9 +47,10 @@ def create_header():
                         dbc.Col(
                             html.Div(
                                 [
-                                    html.Span("● LIVE", className="live-indicator"),
+                                    html.Span("● LIVE", className="live-indicator", style={"marginRight": "8px"}),
                                     html.Span(id="server-time", className="text-muted small"),
-                                ]
+                                ],
+                                style={"display": "flex", "alignItems": "center"}
                             ),
                             width="auto",
                             className="d-flex align-items-center ms-3",
@@ -223,7 +224,7 @@ def update_dashboard(n_clicks, n_intervals, exchange, symbol, timeframe):
     ctx = dash.callback_context
     trigger_id = ctx.triggered[0]["prop_id"].split(".")[0]
 
-    current_time = datetime.now().strftime("%H:%M:%S")
+    current_time = " " + datetime.now().strftime("%H:%M:%S")
 
     # Default initial state
     if not n_clicks and trigger_id != "interval-component":
@@ -268,9 +269,9 @@ def update_dashboard(n_clicks, n_intervals, exchange, symbol, timeframe):
             loop.close()
 
             # Create Signal Card
-            from components.signals_panel import create_signal_card
+            from components.signals_panel import create_signals_panel
 
-            signal_card = create_signal_card(signal_result)
+            signal_card = create_signals_panel(symbol)
 
         except Exception as e:
             logger.error(f"Signal generation error: {e}")

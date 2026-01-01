@@ -27,6 +27,7 @@ except ImportError:
 
 from utils.logger_config import setup_logging
 from ml.feature_engineering import create_all_features
+from ml.labeling import create_barrier_labels_vectorized, calculate_atr
 
 logger = setup_logging()
 
@@ -69,6 +70,7 @@ class LightGBMSignalGenerator:
         self.is_trained = False
         self.model: Optional[lgb.Booster] = None
         self.feature_names: List[str] = []
+        self.calibration_params: Optional[Dict] = None  # For probability calibration
         
         # Model parameters optimized for trading signals
         self.params = {
@@ -252,26 +254,50 @@ class LightGBMSignalGenerator:
         
         return features.values, feature_names
     
-    def _create_labels(self, df: pd.DataFrame, threshold: float = 0.005) -> np.ndarray:
+    def _create_labels(
+        self, 
+        df: pd.DataFrame, 
+        threshold: float = 0.005,
+        use_barrier_labels: bool = True,
+        tp_atr_mult: float = 2.5,
+        sl_atr_mult: float = 1.5,
+        horizon_bars: int = 4,
+    ) -> np.ndarray:
         """
         Create classification labels based on future price movement.
         
         Args:
             df: OHLCV DataFrame
-            threshold: Price change threshold (0.5% default)
+            threshold: Price change threshold for simple labels (0.5% default)
+            use_barrier_labels: If True, use TP/SL barrier-based labels (recommended)
+            tp_atr_mult: Take Profit ATR multiplier (for barrier labels)
+            sl_atr_mult: Stop Loss ATR multiplier (for barrier labels)
+            horizon_bars: How many bars ahead to check barriers
             
         Returns:
             Label array: 0=SELL, 1=HOLD, 2=BUY
         """
-        # Look at next candle's close vs current close
-        future_returns = df['close'].shift(-1) / df['close'] - 1
-        
-        labels = np.where(
-            future_returns > threshold, 2,  # BUY
-            np.where(future_returns < -threshold, 0, 1)  # SELL or HOLD
-        )
-        
-        return labels[:-1]  # Remove last (no future data)
+        if use_barrier_labels:
+            # Use barrier-based labels (TP hit before SL)
+            # This is more realistic and aligns with actual trading
+            labels = create_barrier_labels_vectorized(
+                df,
+                tp_atr_mult=tp_atr_mult,
+                sl_atr_mult=sl_atr_mult,
+                horizon_bars=horizon_bars,
+            )
+            # Remove last horizon_bars (no future data)
+            return labels[:-horizon_bars]
+        else:
+            # Legacy simple labels based on next candle return
+            future_returns = df['close'].shift(-1) / df['close'] - 1
+            
+            labels = np.where(
+                future_returns > threshold, 2,  # BUY
+                np.where(future_returns < -threshold, 0, 1)  # SELL or HOLD
+            )
+            
+            return labels[:-1]  # Remove last (no future data)
     
     def train(
         self,
@@ -280,6 +306,10 @@ class LightGBMSignalGenerator:
         early_stopping_rounds: int = 50,
         test_size: float = 0.2,
         use_new_features: bool = False,
+        use_barrier_labels: bool = True,
+        tp_atr_mult: float = 2.5,
+        sl_atr_mult: float = 1.5,
+        horizon_bars: int = 4,
     ) -> Dict[str, Any]:
         """
         Train the LightGBM model.
@@ -290,12 +320,17 @@ class LightGBMSignalGenerator:
             early_stopping_rounds: Early stopping patience
             test_size: Test set proportion
             use_new_features: Use enhanced feature engineering (ADX, OBV, VWAP, Donchian)
+            use_barrier_labels: Use barrier-based labels (TP before SL) - recommended
+            tp_atr_mult: Take Profit ATR multiplier for barrier labels
+            sl_atr_mult: Stop Loss ATR multiplier for barrier labels
+            horizon_bars: Number of bars to look ahead for barrier hits
 
         Returns:
             Training metrics dictionary
         """
         logger.info(f"Training LightGBM on {len(df)} samples...")
         logger.info(f"Using enhanced features: {use_new_features}")
+        logger.info(f"Using barrier labels: {use_barrier_labels} (TP={tp_atr_mult}*ATR, SL={sl_atr_mult}*ATR, horizon={horizon_bars})")
 
         # Prepare features
         if use_new_features:
@@ -309,7 +344,14 @@ class LightGBMSignalGenerator:
             X, self.feature_names = self._prepare_features(df)
             logger.info(f"Using {len(self.feature_names)} legacy features")
 
-        y = self._create_labels(df)
+        # Create labels
+        y = self._create_labels(
+            df,
+            use_barrier_labels=use_barrier_labels,
+            tp_atr_mult=tp_atr_mult,
+            sl_atr_mult=sl_atr_mult,
+            horizon_bars=horizon_bars,
+        )
         
         # Align lengths
         min_len = min(len(X), len(y))
@@ -388,6 +430,54 @@ class LightGBMSignalGenerator:
             }
         }
     
+    def _apply_calibration(self, probs: np.ndarray) -> np.ndarray:
+        """
+        Apply probability calibration using stored calibration parameters.
+        
+        Args:
+            probs: Raw probabilities [SELL, HOLD, BUY]
+        
+        Returns:
+            Calibrated probabilities [SELL, HOLD, BUY]
+        """
+        if not self.calibration_params:
+            return probs
+        
+        try:
+            calibrated = np.zeros_like(probs)
+            
+            for class_idx, class_name in enumerate(['SELL', 'HOLD', 'BUY']):
+                if class_name in self.calibration_params:
+                    calibrator = self.calibration_params[class_name]
+                    # Apply isotonic regression transform
+                    calibrated[class_idx] = calibrator.transform([probs[class_idx]])[0]
+                else:
+                    calibrated[class_idx] = probs[class_idx]
+            
+            # Renormalize to ensure probabilities sum to 1
+            calibrated = calibrated / calibrated.sum()
+            return calibrated
+        
+        except Exception as e:
+            logger.warning(f"Calibration application failed: {e}, using raw probabilities")
+            return probs
+    
+    def load_calibration(self, calibration_path: str):
+        """
+        Load calibration parameters from file.
+        
+        Args:
+            calibration_path: Path to calibration pickle file
+        """
+        try:
+            import pickle
+            with open(calibration_path, 'rb') as f:
+                self.calibration_params = pickle.load(f)
+            logger.info(f"Loaded calibration parameters from {calibration_path}")
+        except Exception as e:
+            logger.warning(f"Failed to load calibration: {e}")
+            self.calibration_params = None
+    
     def predict(self, df: pd.DataFrame) -> Dict[str, Any]:
         """
         Generate prediction from current market data.
@@ -428,6 +518,10 @@ class LightGBMSignalGenerator:
         X_scaled = self.scaler.transform(X[-1:])  # Last row only
         probs = self.model.predict(X_scaled)[0]
         
+        # Apply calibration if available
+        if self.calibration_params:
+            probs = self._apply_calibration(probs)
+        
         # probs order: [SELL, HOLD, BUY] (0, 1, 2)
         sell_prob, hold_prob, buy_prob = probs
         
@@ -453,6 +547,64 @@ class LightGBMSignalGenerator:
             'timestamp': datetime.now().isoformat(),
         }
 
+    def predict_batch_with_probs(self, df: pd.DataFrame) -> Tuple[np.ndarray, np.ndarray]:
+        """
+        Generate predictions with probabilities for all rows.
+        
+        Args:
+            df: OHLCV DataFrame
+            
+        Returns:
+            Tuple of (predictions, probabilities)
+            - predictions: Array of predictions (0=SELL, 1=HOLD, 2=BUY)
+            - probabilities: Array of probability arrays [sell_prob, hold_prob, buy_prob] for each row
+        """
+        if self.model is None:
+            default_probs = np.array([[0.33, 0.34, 0.33]] * len(df))
+            return np.ones(len(df), dtype=int), default_probs
+        
+        # Prepare features
+        if self.feature_names and len(self.feature_names) > 64:
+            from ml.feature_engineering import create_all_features
+            features_df = create_all_features(df, smart_money_indicators=None, use_new_features=True)
+            X = features_df.values
+        else:
+            X, _ = self._prepare_features(df)
+        
+        if len(X) == 0:
+            default_probs = np.array([[0.33, 0.34, 0.33]] * len(df))
+            return np.ones(len(df), dtype=int), default_probs
+        
+        # Scale and predict
+        X_scaled = self.scaler.transform(X)
+        probs = self.model.predict(X_scaled)
+        
+        # Calculate predictions using same logic as predict_batch
+        predictions = np.ones(len(probs), dtype=int)  # Default HOLD
+        
+        mean_sell = np.mean(probs[:, 0])
+        mean_buy = np.mean(probs[:, 2])
+        
+        buy_threshold = mean_buy + 0.01
+        sell_threshold = mean_sell + 0.01
+        min_diff = 0.01
+        
+        for i, prob in enumerate(probs):
+            sell_prob, hold_prob, buy_prob = prob
+            if buy_prob > buy_threshold and (buy_prob - sell_prob) > min_diff:
+                predictions[i] = 2  # BUY
+            elif sell_prob > sell_threshold and (sell_prob - buy_prob) > min_diff:
+                predictions[i] = 0  # SELL
+        
+        # Pad to match original df length
+        if len(predictions) < len(df):
+            pad_len = len(df) - len(predictions)
+            predictions = np.pad(predictions, (0, pad_len), constant_values=1)
+            pad_probs = np.array([[0.33, 0.34, 0.33]] * pad_len)
+            probs = np.vstack([probs, pad_probs])
+        
+        return predictions, probs
+    
     def predict_batch(self, df: pd.DataFrame) -> np.ndarray:
         """
         Generate predictions for all rows in DataFrame.
@@ -625,9 +777,25 @@ class LightGBMSignalGenerator:
                 self.scaler = meta['scaler']
                 self.feature_names = meta['feature_names']
                 self.is_trained = meta['is_trained']
+                # Load calibration if present
+                if 'calibration_params' in meta:
+                    self.calibration_params = meta['calibration_params']
         else:
             logger.warning("Metadata file not found, using default scaler")
             self.is_trained = True
+        
+        # Try to load calibration from separate file
+        cal_path = path.replace('.txt', '_calibration.pkl').replace('.lgb', '_calibration.pkl').replace('.pkl', '_calibration.pkl')
+        if not cal_path.endswith('_calibration.pkl'):
+            cal_path = path.replace('.txt', '').replace('.lgb', '').replace('.pkl', '') + '_calibration.pkl'
+        
+        if Path(cal_path).exists() and not self.calibration_params:
+            try:
+                with open(cal_path, 'rb') as f:
+                    self.calibration_params = pickle.load(f)
+                    logger.info(f"Loaded calibration from {cal_path}")
+            except Exception as e:
+                logger.warning(f"Failed to load calibration: {e}")
         
         logger.info(f"LightGBM model loaded from {path}")
 

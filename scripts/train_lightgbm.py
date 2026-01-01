@@ -1,6 +1,12 @@
 """
 Comprehensive LightGBM training script for MaxFlash.
-Trains model on 6 months of historical data from top 50 coins with enhanced features.
+Trains model on historical data with barrier-based labels (TP before SL).
+
+Key features:
+- 1h timeframe for reduced noise and better signal quality
+- Barrier-based labels (TP hit before SL within horizon)
+- Top-20 coins by volume across Binance/Bybit/OKX
+- Enhanced feature engineering
 """
 
 import sys
@@ -13,12 +19,25 @@ import pandas as pd
 import ccxt
 from datetime import datetime, timedelta
 from ml.lightgbm_model import LightGBMSignalGenerator
+from ml.labeling import get_label_distribution
 from utils.logger_config import setup_logging
 
 logger = setup_logging()
 
-# Top 50 coins by market cap (excluding stablecoins)
-# Updated: MATIC->POL, EOS->WIF, RNDR->RENDER (Binance Futures updates Dec 2024)
+# Training configuration
+TRAINING_CONFIG = {
+    'timeframe': '1h',           # 1h timeframe for reduced noise
+    'days_back': 180,            # 6 months of data
+    'min_candles': 500,          # Minimum candles required
+    'use_barrier_labels': True,  # Use TP/SL barrier labels
+    'tp_atr_mult': 2.5,          # TP = entry + 2.5*ATR
+    'sl_atr_mult': 1.5,          # SL = entry - 1.5*ATR
+    'horizon_bars': 4,           # Look 4 bars (4 hours) ahead
+    'use_new_features': True,    # Enhanced feature engineering
+}
+
+# Top coins by market cap (excluding stablecoins)
+# Will be overridden by dynamic top-20 selection if available
 TOP_50_COINS = [
     "BTC/USDT", "ETH/USDT", "BNB/USDT", "SOL/USDT", "XRP/USDT",
     "ADA/USDT", "AVAX/USDT", "DOGE/USDT", "DOT/USDT", "POL/USDT",
@@ -32,10 +51,44 @@ TOP_50_COINS = [
     "EGLD/USDT", "FLOW/USDT", "ICP/USDT", "HBAR/USDT", "QNT/USDT"
 ]
 
+# Try to use dynamic universe selector
+try:
+    from utils.universe_selector import get_top_n_pairs
+    HAS_UNIVERSE_SELECTOR = True
+except ImportError:
+    HAS_UNIVERSE_SELECTOR = False
+    logger.warning("Universe selector not available, using static coin list")
+
+
+def get_training_coins(n: int = 20) -> list:
+    """
+    Get list of coins to train on.
+    
+    Uses dynamic universe selector if available, falls back to static list.
+    
+    Args:
+        n: Number of top coins to use
+        
+    Returns:
+        List of symbol strings
+    """
+    if HAS_UNIVERSE_SELECTOR:
+        try:
+            logger.info(f"Fetching top-{n} coins by volume across exchanges...")
+            coins = get_top_n_pairs(n=n, force_refresh=True)
+            if coins:
+                logger.info(f"Using {len(coins)} coins from universe selector")
+                return coins
+        except Exception as e:
+            logger.warning(f"Universe selector failed: {e}, using static list")
+    
+    # Fallback to static list
+    return TOP_50_COINS[:n]
+
 
 def load_historical_data(
     symbol: str,
-    timeframe: str = '15m',
+    timeframe: str = '1h',
     days_back: int = 180,
     exchange_id: str = 'binance'
 ) -> pd.DataFrame:
@@ -120,19 +173,27 @@ def load_historical_data(
         return None
 
 
-def train_model():
+def train_model(n_coins: int = 20):
     """
     Main training function.
+    
+    Args:
+        n_coins: Number of top coins to train on (default: 20 for less noise)
     """
+    config = TRAINING_CONFIG
+    
     print("=" * 80)
-    print("LIGHTGBM TRAINING - 6 MONTHS - 50 COINS - ENHANCED FEATURES")
+    print("LIGHTGBM TRAINING - BARRIER LABELS (TP before SL)")
     print("=" * 80)
+    print(f"\nConfiguration:")
+    print(f"  Timeframe: {config['timeframe']}")
+    print(f"  Days back: {config['days_back']}")
+    print(f"  Barrier labels: TP={config['tp_atr_mult']}*ATR, SL={config['sl_atr_mult']}*ATR")
+    print(f"  Horizon: {config['horizon_bars']} bars ({config['horizon_bars']}h)")
+    print(f"  Target coins: {n_coins}")
 
-    # Configuration
-    TIMEFRAME = '15m'
-    DAYS_BACK = 180  # 6 months
-    EXCHANGE = 'binance'
-    MIN_CANDLES = 1000  # Minimum candles required
+    # Get coins to train on
+    training_coins = get_training_coins(n=n_coins)
 
     # Data collection
     all_data = []
@@ -142,17 +203,17 @@ def train_model():
     print("PHASE 1: DATA COLLECTION")
     print(f"{'='*80}\n")
 
-    for i, coin in enumerate(TOP_50_COINS, 1):
-        print(f"[{i}/{len(TOP_50_COINS)}] {coin}...", end=" ")
+    for i, coin in enumerate(training_coins, 1):
+        print(f"[{i}/{len(training_coins)}] {coin}...", end=" ")
 
         df = load_historical_data(
             symbol=coin,
-            timeframe=TIMEFRAME,
-            days_back=DAYS_BACK,
-            exchange_id=EXCHANGE
+            timeframe=config['timeframe'],
+            days_back=config['days_back'],
+            exchange_id='binance'
         )
 
-        if df is not None and len(df) >= MIN_CANDLES:
+        if df is not None and len(df) >= config['min_candles']:
             all_data.append(df)
             successful_coins.append(coin)
             print(f"[OK] {len(df):,} candles")
@@ -167,7 +228,7 @@ def train_model():
     print(f"\n{'='*80}")
     print(f"DATA COLLECTION SUMMARY")
     print(f"{'='*80}")
-    print(f"Successfully loaded: {len(successful_coins)}/{len(TOP_50_COINS)} coins")
+    print(f"Successfully loaded: {len(successful_coins)}/{len(training_coins)} coins")
     print(f"Total candles: {sum(len(df) for df in all_data):,}")
 
     combined_df = pd.concat(all_data, ignore_index=True)
@@ -178,7 +239,7 @@ def train_model():
 
     # Model training
     print(f"\n{'='*80}")
-    print("PHASE 2: MODEL TRAINING")
+    print("PHASE 2: MODEL TRAINING (BARRIER LABELS)")
     print(f"{'='*80}\n")
 
     model = LightGBMSignalGenerator()
@@ -186,10 +247,14 @@ def train_model():
     try:
         metrics = model.train(
             df=combined_df,
-            num_boost_round=1000,
+            num_boost_round=500,
             early_stopping_rounds=50,
             test_size=0.2,
-            use_new_features=True  # ← Enable enhanced features!
+            use_new_features=config['use_new_features'],
+            use_barrier_labels=config['use_barrier_labels'],
+            tp_atr_mult=config['tp_atr_mult'],
+            sl_atr_mult=config['sl_atr_mult'],
+            horizon_bars=config['horizon_bars'],
         )
 
         # Display results
@@ -250,9 +315,13 @@ def train_model():
             f.write(f"Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
             f.write(f"Coins used: {len(successful_coins)}\n")
             f.write(f"Total samples: {len(combined_df):,}\n")
-            f.write(f"Timeframe: {TIMEFRAME}\n")
-            f.write(f"Days back: {DAYS_BACK}\n")
-            f.write(f"Enhanced features: Yes (ADX, OBV, VWAP, Donchian)\n")
+            f.write(f"Timeframe: {config['timeframe']}\n")
+            f.write(f"Days back: {config['days_back']}\n")
+            f.write(f"Enhanced features: {config['use_new_features']}\n")
+            f.write(f"Barrier labels: {config['use_barrier_labels']}\n")
+            f.write(f"  TP ATR mult: {config['tp_atr_mult']}\n")
+            f.write(f"  SL ATR mult: {config['sl_atr_mult']}\n")
+            f.write(f"  Horizon bars: {config['horizon_bars']}\n")
             f.write(f"Total features: {len(model.feature_names)}\n\n")
             f.write(f"Accuracy: {metrics['accuracy']:.4f}\n")
             f.write(f"Iterations: {metrics['num_iterations']}\n\n")
@@ -277,9 +346,15 @@ def train_model():
 
 
 if __name__ == "__main__":
+    import argparse
+    
+    parser = argparse.ArgumentParser(description="Train LightGBM model with barrier labels")
+    parser.add_argument('--coins', type=int, default=20, help='Number of top coins to train on (default: 20)')
+    args = parser.parse_args()
+    
     print(f"\nStart time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
 
-    result = train_model()
+    result = train_model(n_coins=args.coins)
 
     print(f"\nEnd time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
 

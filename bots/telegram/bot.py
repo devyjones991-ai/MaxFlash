@@ -10,6 +10,7 @@ from telegram.ext import (
 )
 from typing import Optional
 import structlog
+import asyncio
 
 from app.config import settings
 from app.database import AsyncSession
@@ -17,12 +18,21 @@ from app.models.user import User, UserRole, Subscription, SubscriptionStatus
 from app.models.signal import Signal, SignalRating
 from app.repositories.signal_repository import SignalRepository
 from sqlalchemy import select
-# from services.llm_engine import llm_engine
+
+# Import health monitoring
+try:
+    from services.monitoring.health_monitor import get_health_monitor
+    HAS_MONITORING = True
+except ImportError:
+    HAS_MONITORING = False
 
 logger = structlog.get_logger()
 
 # Состояния диалога
 MENU, ANALYZE_WAITING = range(2)
+
+# Admin user IDs (can view health reports)
+ADMIN_USER_IDS = set()
 
 
 class TelegramBot:
@@ -49,6 +59,7 @@ class TelegramBot:
                     MessageHandler(filters.Regex("^(🤖 Анализ рынка)$"), self.analyze_start),
                     MessageHandler(filters.Regex("^(👤 Мой статус)$"), self.status_command),
                     MessageHandler(filters.Regex("^(❓ Помощь)$"), self.help_command),
+                    MessageHandler(filters.Regex("^(🔧 Здоровье системы)$"), self.health_command),
                 ],
                 ANALYZE_WAITING: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.analyze_process)],
             },
@@ -57,6 +68,11 @@ class TelegramBot:
 
         self.application.add_handler(conv_handler)
         self.application.add_handler(CallbackQueryHandler(self.button_callback))
+
+        # Direct commands (outside conversation)
+        self.application.add_handler(CommandHandler("health", self.health_command_direct))
+        self.application.add_handler(CommandHandler("model", self.model_status_command))
+
         # Fallback для неизвестных команд вне диалога
         self.application.add_handler(MessageHandler(filters.COMMAND, self.unknown_command))
 
@@ -68,9 +84,14 @@ class TelegramBot:
         user = update.effective_user
         await self._get_or_create_user(user.id, user.username)
 
+        # Add admin users (first user to /start becomes admin, or set via ADMIN_USER_IDS)
+        if not ADMIN_USER_IDS:
+            ADMIN_USER_IDS.add(user.id)
+
         keyboard = [
             ["📊 Сигналы", "🤖 Анализ рынка"],
             ["👤 Мой статус", "❓ Помощь"],
+            ["🔧 Здоровье системы"],
         ]
         reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
 
@@ -256,6 +277,96 @@ class TelegramBot:
     async def unknown_command(self, update: Update, _context: ContextTypes.DEFAULT_TYPE):
         if update.message:
             await update.message.reply_text("Неизвестная команда. Введите /start для меню.")
+
+    async def health_command(self, update: Update, _context: ContextTypes.DEFAULT_TYPE):
+        """Handler for health check button."""
+        if not HAS_MONITORING:
+            if update.message:
+                await update.message.reply_text("❌ Мониторинг недоступен")
+            return MENU
+
+        try:
+            monitor = get_health_monitor()
+            report = monitor.format_health_report()
+            if update.message:
+                await update.message.reply_text(report, parse_mode="Markdown")
+        except Exception as e:
+            logger.error(f"Health check error: {e}")
+            if update.message:
+                await update.message.reply_text(f"❌ Ошибка мониторинга: {e}")
+        return MENU
+
+    async def health_command_direct(self, update: Update, _context: ContextTypes.DEFAULT_TYPE):
+        """Direct /health command handler."""
+        if not HAS_MONITORING:
+            if update.message:
+                await update.message.reply_text("❌ Мониторинг недоступен")
+            return
+
+        try:
+            monitor = get_health_monitor()
+            report = monitor.format_health_report()
+            if update.message:
+                await update.message.reply_text(report, parse_mode="Markdown")
+        except Exception as e:
+            logger.error(f"Health check error: {e}")
+            if update.message:
+                await update.message.reply_text(f"❌ Ошибка мониторинга: {e}")
+
+    async def model_status_command(self, update: Update, _context: ContextTypes.DEFAULT_TYPE):
+        """Show detailed model status (/model command)."""
+        if not HAS_MONITORING:
+            if update.message:
+                await update.message.reply_text("❌ Мониторинг недоступен")
+            return
+
+        try:
+            monitor = get_health_monitor()
+            model_health = monitor.get_model_health()
+
+            # Format model details
+            status_emoji = {
+                'healthy': '✅',
+                'stale': '⚠️',
+                'degraded': '🔴',
+                'critical': '❌',
+                'unknown': '❓'
+            }.get(model_health.get('status'), '❓')
+
+            text = f"{status_emoji} *Model Status*\n\n"
+
+            if model_health.get('model_exists'):
+                text += f"📁 Model: exists\n"
+                if model_health.get('last_modified'):
+                    text += f"🕐 Last updated: {model_health['last_modified'][:16]}\n"
+                if model_health.get('model_age_hours'):
+                    text += f"⏱ Age: {model_health['model_age_hours']:.1f} hours\n"
+            else:
+                text += "📁 Model: ❌ NOT FOUND\n"
+
+            text += "\n*Performance*\n"
+            if model_health.get('recent_accuracy'):
+                text += f"📊 Recent: {model_health['recent_accuracy']*100:.1f}%\n"
+            if model_health.get('best_accuracy'):
+                text += f"🏆 Best: {model_health['best_accuracy']*100:.1f}%\n"
+
+            # Recent training history
+            history = model_health.get('training_history', [])
+            if history:
+                text += "\n*Recent Training*\n"
+                for run in history[-5:]:
+                    status = "✅" if run.get('status') == 'success' else "🔄"
+                    acc = run.get('new_accuracy', 0) * 100
+                    ts = run.get('timestamp', '')[:10]
+                    text += f"{status} {ts}: {acc:.1f}%\n"
+
+            if update.message:
+                await update.message.reply_text(text, parse_mode="Markdown")
+
+        except Exception as e:
+            logger.error(f"Model status error: {e}")
+            if update.message:
+                await update.message.reply_text(f"❌ Ошибка: {e}")
 
     def _format_signal(self, signal: Signal) -> str:
         """Форматировать сигнал для отправки."""

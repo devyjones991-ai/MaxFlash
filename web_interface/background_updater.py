@@ -136,15 +136,6 @@ def get_signal_from_change(change_24h: float) -> tuple:
     return signal, score, reasons
 
 
-# Blacklist stablecoins and wrapped/pegged tokens that aren't real trading coins
-COIN_BLACKLIST = {
-    'usdt', 'usdc', 'busd', 'dai', 'tusd', 'usdp', 'usdd', 'gusd', 'frax', 'lusd',
-    'usdt0', 'usd1', 'usdc.e', 'usdt.e', 'wbtc', 'weth', 'steth', 'wsteth', 'reth',
-    'cbeth', 'hbtc', 'renbtc', 'tbtc', 'sbtc', 'paxg', 'xaut', 'fdusd', 'pyusd',
-    'eurc', 'eurs', 'eurt', 'first digital usd', 'true usd', 'pax dollar',
-}
-
-
 def fetch_crypto_data() -> List[Dict[str, Any]]:
     """Fetch crypto data using MultiSourceDataProvider."""
     try:
@@ -158,17 +149,9 @@ def fetch_crypto_data() -> List[Dict[str, Any]]:
         crypto_markets = overview.get("crypto_markets", [])
 
         if crypto_markets:
-            for coin in crypto_markets:
-                if len(data) >= 50:  # Stop at 50 real coins
-                    break
+            for coin in crypto_markets[:50]:  # Top 50
                 try:
                     symbol = coin.get("symbol", "").upper()
-                    name = coin.get("name", "").lower()
-
-                    # Skip stablecoins and wrapped tokens
-                    if symbol.lower() in COIN_BLACKLIST or name in COIN_BLACKLIST:
-                        continue
-
                     price = coin.get("current_price", 0)
                     change = coin.get("price_change_percentage_24h", 0) or 0
                     volume = coin.get("total_volume", 0) or 0
@@ -222,7 +205,7 @@ def fetch_crypto_data_fallback() -> List[Dict[str, Any]]:
         params = {
             "vs_currency": "usd",
             "order": "market_cap_desc",
-            "per_page": 100,  # Fetch more to filter out stablecoins
+            "per_page": 50,
             "page": 1,
             "sparkline": "false",
             "price_change_percentage": "1h,24h,7d"
@@ -234,15 +217,7 @@ def fetch_crypto_data_fallback() -> List[Dict[str, Any]]:
 
         data = []
         for coin in coins:
-            if len(data) >= 50:
-                break
             symbol = coin.get("symbol", "").upper()
-            name = coin.get("name", "").lower()
-
-            # Skip stablecoins and wrapped tokens
-            if symbol.lower() in COIN_BLACKLIST or name in COIN_BLACKLIST:
-                continue
-
             price = coin.get("current_price", 0)
             change = coin.get("price_change_percentage_24h", 0) or 0
 
