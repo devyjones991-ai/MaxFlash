@@ -83,6 +83,31 @@ body {
     box-shadow: 0 0 10px rgba(255, 0, 255, 0.3) !important;
 }
 
+/* Select dropdown options */
+.form-select option {
+    background-color: #1a1a1a !important;
+    color: #fff !important;
+}
+
+/* Dash dropdown fixes */
+.Select-control, .Select-menu-outer {
+    background-color: #1a1a1a !important;
+    color: #fff !important;
+}
+
+.Select-value-label, .Select-placeholder {
+    color: #fff !important;
+}
+
+.Select-option {
+    background-color: #1a1a1a !important;
+    color: #fff !important;
+}
+
+.Select-option:hover, .Select-option.is-focused {
+    background-color: #333 !important;
+}
+
 /* Signal Cards */
 .signal-card {
     background: linear-gradient(145deg, #1a1a1a, #111);
@@ -137,4 +162,322 @@ h1, h2, h3, h4, h5 {
 .neon-text-pink {
     color: var(--neon-pink);
     text-shadow: 0 0 5px rgba(255, 0, 255, 0.5);
+}
+
+/* ==================== ECOSYSTEM TABS STYLES ==================== */
+
+/* Ecosystem Navigation Tabs */
+.nav-tabs-ecosystem {
+    border-bottom: 2px solid #333;
+    gap: 5px;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+}
+
+.nav-tabs-ecosystem::-webkit-scrollbar {
+    display: none;
+}
+
+.nav-tabs-ecosystem .nav-link {
+    background-color: rgba(20, 20, 30, 0.8);
+    border: 1px solid #333;
+    border-radius: 8px 8px 0 0;
+    color: #888;
+    padding: 10px 15px;
+    margin-bottom: -2px;
+    transition: all 0.3s ease;
+    white-space: nowrap;
+    font-size: 0.9rem;
+}
+
+.nav-tabs-ecosystem .nav-link:hover {
+    background-color: rgba(30, 30, 50, 0.9);
+    border-color: var(--neon-blue);
+    color: var(--neon-blue);
+}
+
+.nav-tabs-ecosystem .nav-link.active {
+    background-color: rgba(0, 243, 255, 0.1);
+    border-color: var(--neon-blue);
+    border-bottom-color: transparent;
+    color: var(--neon-blue);
+    box-shadow: 0 -2px 10px rgba(0, 243, 255, 0.3);
+}
+
+/* Card hover glow effect */
+.hover-glow {
+    transition: all 0.3s ease;
+}
+
+.hover-glow:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 5px 20px rgba(0, 243, 255, 0.2);
+}
+
+/* Trading overview cards */
+.border-warning {
+    border-color: #ffc107 !important;
+}
+
+.border-info {
+    border-color: #17a2b8 !important;
+}
+
+.border-danger {
+    border-color: #dc3545 !important;
+}
+
+.border-success {
+    border-color: #28a745 !important;
+}
+
+.border-primary {
+    border-color: #007bff !important;
+}
+
+/* Progress bars in risk section */
+.progress {
+    background-color: rgba(255, 255, 255, 0.1);
+    border-radius: 4px;
+    height: 20px;
+}
+
+/* Accordion in education */
+.accordion-button {
+    background-color: rgba(30, 30, 40, 0.9);
+    color: #fff;
+    border: 1px solid #333;
+}
+
+.accordion-button:not(.collapsed) {
+    background-color: rgba(0, 243, 255, 0.1);
+    color: var(--neon-blue);
+}
+
+.accordion-body {
+    background-color: rgba(20, 20, 30, 0.9);
+    border: 1px solid #333;
+    border-top: none;
+}
+
+/* Form inputs in calculator */
+.form-control, .form-select {
+    background-color: rgba(20, 20, 30, 0.9) !important;
+    border-color: #444 !important;
+    color: #fff !important;
+}
+
+.form-control:focus, .form-select:focus {
+    border-color: var(--neon-blue) !important;
+    box-shadow: 0 0 10px rgba(0, 243, 255, 0.2) !important;
+}
+
+/* Alert boxes */
+.alert-info {
+    background-color: rgba(0, 243, 255, 0.1);
+    border-color: var(--neon-blue);
+    color: var(--neon-blue);
+}
+
+.alert-warning {
+    background-color: rgba(255, 193, 7, 0.1);
+    border-color: #ffc107;
+    color: #ffc107;
+}
+
+/* Mobile responsive adjustments for ecosystem */
+@media (max-width: 768px) {
+    .nav-tabs-ecosystem .nav-link {
+        padding: 8px 12px;
+        font-size: 0.8rem;
+    }
+
+    .hover-glow .fs-1 {
+        font-size: 1.5rem !important;
+    }
+}
+
+/* ==================== DARK TABLES ==================== */
+
+/* Force dark background for all tables */
+.table {
+    background-color: #1a1a1a !important;
+    color: #fff !important;
+}
+
+.table > :not(caption) > * > * {
+    background-color: #1a1a1a !important;
+    color: #fff !important;
+    border-color: #333 !important;
+}
+
+.table-dark {
+    --bs-table-bg: #1a1a1a !important;
+    --bs-table-striped-bg: #222 !important;
+    --bs-table-hover-bg: #2a2a2a !important;
+    --bs-table-border-color: #333 !important;
+}
+
+.table-striped > tbody > tr:nth-of-type(odd) > * {
+    background-color: #1e1e1e !important;
+}
+
+.table-striped > tbody > tr:nth-of-type(even) > * {
+    background-color: #1a1a1a !important;
+}
+
+.table thead th {
+    background-color: #252525 !important;
+    color: #fff !important;
+    border-color: #444 !important;
+}
+
+.table tbody td {
+    background-color: inherit !important;
+    border-color: #333 !important;
+}
+
+/* DataTable dark mode */
+.dash-table-container .dash-spreadsheet-container {
+    background-color: #1a1a1a !important;
+}
+
+.dash-table-container .dash-spreadsheet td,
+.dash-table-container .dash-spreadsheet th {
+    background-color: #1a1a1a !important;
+    color: #fff !important;
+    border-color: #333 !important;
+}
+
+/* Card body backgrounds */
+.card-body {
+    background-color: #1a1a1a !important;
+    color: #fff !important;
+}
+
+.card-header {
+    background-color: #222 !important;
+    color: #fff !important;
+}
+
+/* Fix bg-dark to be truly dark */
+.bg-dark {
+    background-color: #1a1a1a !important;
+    color: #fff !important;
+}
+
+/* Card itself must be dark */
+.card {
+    background-color: #1a1a1a !important;
+    color: #fff !important;
+}
+
+/* All card elements dark */
+.card .card-body,
+.card .card-header,
+.card .card-footer {
+    background-color: #1a1a1a !important;
+    color: #fff !important;
+}
+
+/* Accordion items dark */
+.accordion-item {
+    background-color: #1a1a1a !important;
+    border-color: #333 !important;
+    color: #fff !important;
+}
+
+.accordion-item .accordion-body {
+    background-color: #1a1a1a !important;
+    color: #fff !important;
+}
+
+.accordion-button {
+    background-color: #222 !important;
+    color: #fff !important;
+}
+
+.accordion-button:not(.collapsed) {
+    background-color: rgba(0, 243, 255, 0.1) !important;
+    color: var(--neon-blue) !important;
+}
+
+.accordion-button::after {
+    filter: invert(1);
+}
+
+/* Alert secondary dark */
+.alert-secondary {
+    background-color: #2a2a2a !important;
+    border-color: #444 !important;
+    color: #ccc !important;
+}
+
+/* List groups dark */
+.list-group-item {
+    background-color: #1a1a1a !important;
+    border-color: #333 !important;
+    color: #fff !important;
+}
+
+/* Modal dark */
+.modal-content {
+    background-color: #1a1a1a !important;
+    color: #fff !important;
+    border-color: #333 !important;
+}
+
+.modal-header, .modal-footer {
+    border-color: #333 !important;
+}
+
+/* Dropdown dark */
+.dropdown-menu {
+    background-color: #1a1a1a !important;
+    border-color: #333 !important;
+}
+
+.dropdown-item {
+    color: #fff !important;
+}
+
+.dropdown-item:hover {
+    background-color: #333 !important;
+}
+
+/* Tabs dark */
+.nav-tabs .nav-link {
+    color: #888 !important;
+}
+
+.nav-tabs .nav-link.active {
+    background-color: #1a1a1a !important;
+    color: var(--neon-blue) !important;
+    border-color: #333 !important;
+}
+
+/* Tab content dark */
+.tab-content {
+    background-color: transparent !important;
+}
+
+.tab-pane {
+    background-color: transparent !important;
+}
+
+/* Checklist/Radio dark */
+.form-check-label {
+    color: #fff !important;
+}
+
+.form-check-input {
+    background-color: #333 !important;
+    border-color: #555 !important;
+}
+
+.form-check-input:checked {
+    background-color: var(--neon-blue) !important;
+    border-color: var(--neon-blue) !important;
 }
