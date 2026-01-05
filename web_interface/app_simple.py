@@ -40,6 +40,21 @@ try:
     HAS_DEPS = True
     logger = setup_logging()
 
+    # Forex module import
+    try:
+        from forex.dashboard import (
+            create_forex_tab_content,
+            create_forex_signal_card,
+            create_forex_indicators_card,
+            create_forex_chart,
+            create_forex_signals_table,
+        )
+        from forex.signal_generator import get_forex_signal_generator
+        from forex.config import FOREX_PAIRS
+        HAS_FOREX_DASHBOARD = True
+    except ImportError:
+        HAS_FOREX_DASHBOARD = False
+
     # Инициализация менеджеров
     data_manager = MarketDataManager()
     signal_generator = SignalGenerator(data_manager=data_manager)
@@ -362,6 +377,21 @@ def create_simple_app():
                           className="text-center text-muted mb-4"),
                 ])
             ]),
+
+            # Tabs for Crypto / Forex
+            dbc.Tabs(
+                [
+                    dbc.Tab(label="💰 Crypto", tab_id="tab-crypto", children=[
+                        # Original crypto content will be here
+                        html.Div(id="crypto-content")
+                    ]),
+                ] + ([dbc.Tab(label="💱 Forex", tab_id="tab-forex", children=[
+                    create_forex_tab_content() if HAS_FOREX_DASHBOARD else html.P("❌ Forex модуль не доступен")
+                ])] if HAS_FOREX_DASHBOARD else []),
+                id="dashboard-tabs",
+                active_tab="tab-crypto",
+                className="mb-4",
+            ),
 
             # Status Bar with Live Indicator
             dbc.Row([
@@ -855,6 +885,78 @@ def create_simple_app():
         Input("clock-interval", "n_intervals"),
         prevent_initial_call=True
     )
+
+    # ======================== FOREX CALLBACKS ========================
+    if HAS_FOREX_DASHBOARD:
+        @app.callback(
+            [
+                Output("forex-signal-card", "children"),
+                Output("forex-indicators-card", "children"),
+                Output("forex-chart", "figure"),
+            ],
+            [
+                Input("forex-refresh-btn", "n_clicks"),
+                Input("forex-interval", "n_intervals"),
+                Input("forex-pair-dropdown", "value"),
+                Input("forex-timeframe-dropdown", "value"),
+            ],
+            prevent_initial_call=False
+        )
+        def update_forex_signal(n_clicks, n_intervals, pair, timeframe):
+            """Update Forex signal card, indicators, and chart."""
+            try:
+                signal_gen = get_forex_signal_generator()
+                signal = signal_gen.generate_signal(pair, timeframe)
+                
+                if signal:
+                    signal_card = create_forex_signal_card(signal)
+                    indicators_card = create_forex_indicators_card(signal)
+                    
+                    # Get chart data from signal
+                    from forex.data_fetcher import get_forex_data_fetcher
+                    from forex.analyzer import get_forex_analyzer
+                    
+                    data_fetcher = get_forex_data_fetcher()
+                    analyzer = get_forex_analyzer()
+                    
+                    df = data_fetcher.get_candles(pair, timeframe, count=100)
+                    if df is not None and not df.empty:
+                        analysis = analyzer.analyze(df, pair, timeframe)
+                        if analysis and analysis.df is not None:
+                            chart = create_forex_chart(analysis.df, pair, timeframe)
+                        else:
+                            chart = create_forex_chart(df, pair, timeframe)
+                    else:
+                        chart = create_forex_chart(None, pair, timeframe)
+                    
+                    return signal_card, indicators_card, chart
+                else:
+                    empty_card = html.P(f"Нет данных для {pair}", style={"color": "#888"})
+                    return empty_card, empty_card, create_forex_chart(None, pair, timeframe)
+                    
+            except Exception as e:
+                logger.error(f"Forex update error: {e}", exc_info=True)
+                error_msg = html.P(f"Ошибка: {str(e)}", style={"color": "#ff3366"})
+                return error_msg, error_msg, create_forex_chart(None, "", "")
+        
+        @app.callback(
+            Output("forex-signals-table", "children"),
+            [Input("forex-scan-all-btn", "n_clicks")],
+            [dash.dependencies.State("forex-timeframe-dropdown", "value")],
+            prevent_initial_call=True
+        )
+        def scan_all_forex(n_clicks, timeframe):
+            """Scan all forex pairs."""
+            if not n_clicks:
+                return html.P("Нажмите 'Скан всех' для поиска сигналов", style={"color": "#888"})
+            
+            try:
+                signal_gen = get_forex_signal_generator()
+                signals = signal_gen.generate_all_signals(FOREX_PAIRS, timeframe)
+                return create_forex_signals_table(signals)
+            except Exception as e:
+                logger.error(f"Forex scan error: {e}", exc_info=True)
+                return html.P(f"Ошибка: {str(e)}", style={"color": "#ff3366"})
 
     return app
 

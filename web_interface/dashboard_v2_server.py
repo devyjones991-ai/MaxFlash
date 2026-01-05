@@ -137,7 +137,6 @@ app = dash.Dash(
     title="MaxFlash Pro | Trading Terminal",
     update_title=None,
     suppress_callback_exceptions=True,
-    requests_pathname_prefix="/dashboard/",  # For nginx proxy at /dashboard/
     meta_tags=[
         {"name": "viewport", "content": "width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"},
         {"name": "theme-color", "content": "#0a0a1a"},
@@ -1672,11 +1671,10 @@ def update_chart(selected_rows, timeframe, exchange_id, n_fast, market_data):
                 html.Div(reasons_list, className="mb-2"),
             ])
         else:
-            # Active signal - BUY or SELL (signal can be '🟢 BUY' or '🔴 SELL')
-            is_buy = 'BUY' in str(signal)
-            signal_color = 'success' if is_buy else 'danger'
-            signal_icon = '🟢' if is_buy else '🔴'
-            direction = 'LONG' if is_buy else 'SHORT'
+            # Active signal - BUY or SELL
+            signal_color = 'success' if signal == 'BUY' else 'danger'
+            signal_icon = '🟢' if signal == 'BUY' else '🔴'
+            direction = 'LONG' if signal == 'BUY' else 'SHORT'
             
             signal_panel = html.Div([
                 # Header with direction

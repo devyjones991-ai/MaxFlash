@@ -561,7 +561,11 @@ input, select, textarea {
     border-color: #444 !important;
 }
 
-/* Badges - only override dark badges, keep colored badges intact */
+/* Badges */
+.badge {
+    background-color: #333 !important;
+}
+
 .badge-dark, .bg-dark.badge {
     background-color: #333 !important;
 }
