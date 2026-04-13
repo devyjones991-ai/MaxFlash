@@ -14,7 +14,7 @@ dependencies = [
     "ccxt>=4.5.0",
     "cachetools>=5.4.0",
     "websocket-client>=1.7.0",
-    "pydantic>=2.9.0",
+    "pydantic>=2.12.5",
     # ML and Async Trading Dependencies
     "freqtrade>=2024.1",
     "ccxt[async]>=4.5.0",
